@@ -1,5 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Versions are the ones the .NET 10.0.400 SDK's `dotnet new xunit` template pins,
+       taken rather than chosen: global.json fixes the SDK, so these are the versions
+       every machine and CI already agree on. Central package management is not worth
+       a file until a second project has a version to keep in step (E14-05, E0-09). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../../src/Dlo.Domain/Dlo.Domain.csproj" />
   </ItemGroup>
