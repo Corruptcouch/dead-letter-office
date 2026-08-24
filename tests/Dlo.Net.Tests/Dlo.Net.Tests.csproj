@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The L3 harness and its ProjectReference to Dlo.Game arrive with E0-09. -->
+
+</Project>

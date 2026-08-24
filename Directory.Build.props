@@ -1,0 +1,61 @@
+<Project>
+
+  <!--
+    Every custom MSBuild property in this repo lives here, at the root.
+
+    Godot regenerates src/Dlo.Game/Dlo.Game.csproj. Project references survive that;
+    custom properties do not (arch §1.4). So this file is the only durable place to
+    put them, and Dlo.Game.csproj is never hand-authored.
+  -->
+
+  <PropertyGroup>
+    <!--
+      net10.0 overrides the net8.0 Godot generates. This is a decision, not an
+      oversight - read arch §1.4 before "fixing" it.
+
+      Godot 4.7.2's project generator hardcodes net8.0 and GodotSharp ships against
+      it, but that is Godot's floor, not a ceiling. Measured on 2026-08-24, all four
+      legs separately: net10.0 builds against GodotSharp; Godot's own in-editor
+      build path (the build-solutions switch) builds it; the editor does not rewrite
+      the TargetFramework setting; and it runs, reporting .NET 10.0.11.
+
+      The runtime is .NET 10 at either TFM, because Godot's host reads
+      GodotPlugins.runtimeconfig.json (8.0.0 with rollForward: LatestMajor) and takes
+      the newest major installed. So net8.0 would only mean compiling against an older
+      BCL than the one actually executing - and one that leaves support in November
+      2026, before this project ships. There is no runtime cost either way; the only
+      thing the TFM buys or denies is compile surface.
+
+      Export is the one leg still unverified - it needs 4.7.2 export templates, which
+      are not installed. E18-01 verifies it, and is where the finding goes if it fails.
+
+      This file is the authority for the five hand-authored projects. Dlo.Game is the
+      exception, and it has to be - measured during E14-03, 2026-08-24:
+
+        - MSBuild imports this file *before* the project body, so a TargetFramework
+          line inside a .csproj beats this one.
+        - Godot re-inserts that line as net8.0 whenever it finds it missing. Deleting
+          it does not work; it comes back on the next editor run.
+        - Godot does not touch the line once it has a value. It only fills in an
+          absent one.
+
+      So Dlo.Game.csproj carries an explicit net10.0 of its own, and that is what makes
+      the override stick. Arch §1.4's "the editor does not rewrite <TargetFramework>"
+      is accurate but only tells half the story - it does not rewrite a value, and it
+      does re-add a missing line.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Warnings-as-errors in Dlo.Domain only (arch §2, standards §1). The Game layer
+    compiles Godot's noisy generated glue, and failing the build on it means nobody
+    can build. The enforced gate there is the suite instead.
+  -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Dlo.Domain'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

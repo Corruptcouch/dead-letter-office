@@ -1,0 +1,17 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!--
+      net10.0 overrides the net8.0 Godot generates (arch §1.4). The rationale lives
+      in Directory.Build.props; the reason it is repeated here is mechanical:
+      measured 2026-08-24, Godot re-inserts this line as net8.0 whenever it finds it
+      missing, so Directory.Build.props alone cannot hold the override for this one
+      project. Godot does not touch the line once it has a value - it only fills in
+      an absent one - so setting it here is what makes the override stick.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Dlo.Domain\Dlo.Domain.csproj" />
+  </ItemGroup>
+</Project>

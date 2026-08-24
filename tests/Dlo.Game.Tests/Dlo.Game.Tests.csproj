@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- GdUnit4 and the ProjectReference to Dlo.Game arrive with E14-05; the Godot
+       project that reference points at does not exist until E14-03. -->
+
+</Project>
