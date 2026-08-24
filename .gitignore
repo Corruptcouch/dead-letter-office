@@ -1,0 +1,103 @@
+# Dead Letter Office
+#
+# Two rules for editing this file:
+#   1. No Godot 3 entries. This project targets Godot 4.6 only and there is no
+#      compatibility target (docs/CODING-STANDARDS.md §1.1). Most .gitignore
+#      snippets you will find online are for Godot 3 and quietly bring
+#      `.mono/`, `data_*/` and `export.cfg` with them.
+#   2. No unanchored broad patterns. A pattern like `data_*/` matches at every
+#      depth, and content silently failing to commit is a worse outcome than a
+#      little untracked noise.
+
+# ── Godot 4 ─────────────────────────────────────────────────────────────────
+
+# Import cache and editor state. Rebuilt on first open of a fresh clone.
+.godot/
+
+# Compiled by the editor from the CSV source.
+*.translation
+
+# Generated on demand by "Install Android Build Template".
+/src/Dlo.Game/android/
+
+# Keystore passwords, notarisation and store credentials. Godot 4 keeps these
+# in their own file specifically so that export_presets.cfg can be committed —
+# see the note below.
+export_credentials.cfg
+
+# NOT ignored, deliberately:
+#
+#   *.import           Each asset's UID and import settings — pixel-art filter
+#                      off, compression mode, and so on. Losing them re-imports
+#                      the whole project with defaults, which silently undoes
+#                      every per-asset decision.
+#
+#   export_presets.cfg E18 automates builds for Windows, Linux and macOS, and
+#                      CI cannot export without the presets. The secrets that
+#                      used to make this file unsafe to commit now live in
+#                      export_credentials.cfg above.
+
+# ── Generated placeholder assets ────────────────────────────────────────────
+#
+# Fully derived from the asset specification (docs/asset-specification.md, E17)
+# via `dotnet run --project tools/Dlo.ContentTool -- generate`. The house project
+# committed its generated placeholders and it cost more than it saved: every
+# asset went through Git LFS (a clone that skipped `git lfs pull` booted into an
+# invisible game), and the bytes were toolchain-coupled — its net8 to net10 move
+# rewrote all 66 PNGs without changing one pixel, because .NET 9 swapped its
+# deflate for zlib-ng. E17 carries the rule; this file is the mechanism.
+#
+# Directory.Build.targets regenerates these before the game builds, so a fresh
+# clone still just works. When the commissioned art lands it replaces these and
+# IS committed — it is authored, not derived, and cannot be regenerated.
+#
+# Anchored to exact paths and matched by extension rather than by directory:
+# the .import sidecars in these same folders must stay tracked, because they
+# carry the stable uid:// that the .tres content files resolve against.
+/src/Dlo.Game/art/placeholder/**/*.png
+/src/Dlo.Game/art/standin/**/*.png
+/src/Dlo.Game/audio/placeholder/*.wav
+/src/Dlo.Game/art/placeholder/manifest.json
+/src/Dlo.Game/art/standin/manifest.json
+
+# ── .NET ────────────────────────────────────────────────────────────────────
+
+bin/
+obj/
+artifacts/
+TestResults/
+*.trx
+
+# ── Editors and tooling ─────────────────────────────────────────────────────
+
+*.user
+*.suo
+*.userprefs
+*.sln.DotSettings.user
+.idea/
+.vs/
+
+# Personal editor state. If the team wants a shared config, un-ignore the
+# specific file — for example `!.vscode/extensions.json` — rather than tracking
+# the whole directory.
+.vscode/
+
+# ── Build and export output ─────────────────────────────────────────────────
+
+# Anchored to the repo root: these are where builds are written, not a pattern
+# that could match a source directory somewhere deeper.
+/build/
+/exports/
+
+# ── OS ──────────────────────────────────────────────────────────────────────
+
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.DS_Store
+
+# ── Transient ───────────────────────────────────────────────────────────────
+
+*.tmp
+*.temp
+*.log
