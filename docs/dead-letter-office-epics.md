@@ -95,7 +95,10 @@ here is `.gitattributes` and the LFS configuration.
   is where each machine records its own.
 - **Godot generates `net8.0` and E14 overrides it, deliberately.** Verified end to end (Arch
   §1.4): `net10.0` builds against GodotSharp, Godot's own `--build-solutions` builds it, the
-  editor does not rewrite the setting, and it runs. The runtime is `.NET 10` at either TFM
+  editor does not rewrite a setting that already has a value, and it runs. It *does* re-add the
+  line as `net8.0` when it is missing, which is why `Dlo.Game.csproj` keeps its own copy rather
+  than deferring to `Directory.Build.props` (Arch §1.4, corrected in E14-03). The runtime is
+  `.NET 10` at either TFM
   because Godot's host rolls forward, so `net8.0` would only mean compiling against an older BCL
   than the one executing — and one that leaves support in November 2026. **Export is the one leg
   not yet verified**, and E18 owns it.

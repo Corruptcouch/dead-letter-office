@@ -123,16 +123,24 @@ Mirrors the house layout so the tooling knowledge transfers.
 ### 1.4 Known gotchas — read before you fight the tooling
 
 The first four are inherited from the house project, and each cost someone an afternoon already.
-**The last three came from probing the pinned 4.7.2 install directly** (2026-08-24), before they
+**The next three came from probing the pinned 4.7.2 install directly** (2026-08-24), before they
 could cost anyone one — so they are findings rather than scar tissue, and they are stated as
 what the binary does rather than as what the release notes say.
+
+**The last three came from actually building E14-03** (2026-08-24), and they are the ones to read
+if the tooling is fighting you: a probe tells you what the binary does when you ask it nicely,
+and building tells you what it does when you are not looking. Two of them **correct a bullet
+above** rather than adding to it, which is the honest reason they are worth the space.
 
 - **Godot regenerates `Dlo.Game.csproj`.** Project references to `Dlo.Domain` survive it;
   custom MSBuild properties do not. Keep custom config in `Directory.Build.props` at the
   repo root.
 - **`project/solution_directory="../.."`** must be set in `project.godot`. Godot's exporter
-  otherwise looks for `Dlo.Game.sln` beside `project.godot` and refuses every C# source
-  during export.
+  otherwise looks beside `project.godot`, finds no solution, and refuses every C# source
+  during export. **Amended by E14-03:** with the setting in place, Godot searches that
+  directory for *any* solution containing a project whose **assembly name** matches — it is
+  not looking for a file called `Dlo.Game.sln`. That is why `dlo.sln` serves, and it is what
+  makes the one-solution layout of §1.3 possible at all. See the last three bullets.
 - **C# hot-reload does not reliably pick up changes in referenced assemblies.** When you
   change Domain code, expect to restart the editor. This is normal; don't spend an afternoon
   on it.
@@ -158,9 +166,9 @@ what the binary does rather than as what the release notes say.
   - `net10.0` **builds** against GodotSharp — a net8.0 library referenced from a net10.0 project
     is ordinary, not a workaround.
   - Godot's own `--build-solutions` **builds it**, so the in-editor build path is not bypassed.
-  - The editor **does not rewrite `<TargetFramework>`** — opening the project headless left the
-    csproj byte-identical. The regeneration warning above applies to custom *properties*, not to
-    the TFM.
+  - The editor **does not rewrite a `<TargetFramework>` that already has a value** — opening the
+    project headless left the csproj byte-identical. The regeneration warning above applies to
+    custom *properties*, not to the TFM. **Read the correction below before acting on this one.**
   - It **runs**, reporting `.NET 10.0.11`.
 
   **And the runtime was `.NET 10.0.11` at `net8.0` too**, because Godot's host reads
@@ -173,6 +181,48 @@ what the binary does rather than as what the release notes say.
   **The one piece still unverified is export** (E18): it needs 4.7.2 export templates, which are
   not installed yet. E18-01 verifies `net10.0` survives a real export, and that is the story to
   revisit this bullet from if it does not.
+
+- **Correction from E14-03: "does not rewrite it" is not the same as "leaves it alone."** Godot
+  **re-inserts `<TargetFramework>net8.0</TargetFramework>` whenever it finds the line missing.**
+  So the obvious reading of the bullet above — delete the line, let `Directory.Build.props`
+  supply `net10.0`, keep one authority — **does not work.** The line returns on the next editor
+  run, and because MSBuild imports `Directory.Build.props` *before* the project body, the
+  returned `net8.0` wins outright.
+
+  `src/Dlo.Game/Dlo.Game.csproj` therefore carries an explicit `net10.0` of its own, and that
+  is what makes the override stick — verified byte-identical across a full editor session.
+  `Directory.Build.props` stays the authority for the five hand-authored projects;
+  **`Dlo.Game` is the documented exception, and it has to be.** Godot only fills in an absent
+  line; it never touches one that has a value.
+
+  (Godot also generated a second TFM line, `net9.0` conditioned on `GodotTargetPlatform ==
+  'android'`. We ship three desktop targets (E18-01), so it is deleted rather than carried.
+  Restore it there if Android ever becomes real.)
+
+- **Exactly one solution under `solution_directory` may contain the `Dlo.Game` assembly.**
+  *Project → Tools → C# → Create C# solution* writes its own `Dlo.Game.sln` into that directory.
+  Leave it there **and** add `Dlo.Game` to `dlo.sln`, and Godot's editor plugin refuses to start:
+
+  > `ERROR: Multiple solutions containing a project with assembly name 'Dlo.Game' were found`
+
+  It fails in `GodotSharpDirs.DetermineProjectLocation()`, which means **no build, no export and
+  no C# in the editor at all** — not a warning. Godot's `Dlo.Game.sln` is deleted; `dlo.sln` is
+  the one solution, holding all six projects (§1.3).
+
+  A consequence worth naming, because it is silent until export time: **`dlo.sln` has to declare
+  `ExportDebug` and `ExportRelease`.** Godot builds exports with those configurations and its own
+  generated solution carried them; `dotnet new sln` creates only `Debug` and `Release`, so
+  `dotnet build dlo.sln -c ExportRelease` fails with `MSB4126` until they are added by hand. Only
+  `Dlo.Domain` and `Dlo.Game` get a `Build.0` under them — an export has no business building the
+  test suites.
+
+- **Godot cannot create the C# project from the command line.** There is no flag for it:
+  `--build-solutions` is a silent no-op when no `.csproj` exists, adding a `.cs` file does not
+  trigger it, and opening the project in the editor does not either. It is strictly
+  *Project → Tools → C# → Create C# solution*, once, by hand. This costs CI nothing, because the
+  csproj is committed — it strands whoever bootstraps the *next* Godot project, which is why it
+  is written down here rather than rediscovered. (Godot also strips `"C#"` back out of
+  `config/features` on each run and does not appear to need it; leave that alone.)
 
 ---
 
@@ -825,7 +875,7 @@ they are answered by measurement or a spike, not by a decision.**
 | Does proximity voice need Steam at all? | **No.** Native capture + pure-C# Opus over `IGameTransport` |
 | `CulpabilityWindow` per event kind | **No window.** Culpability never expires (§4.6) |
 | Shift length | **8–12 min × 3–6 shifts**, provisional, curve is a data file, Gate 2 refines |
-| Target framework, now that the .NET 10 SDK is installed | **`net10.0` everywhere, overriding the `net8.0` Godot generates.** Measured, not assumed: it builds, Godot's own build path builds it, the editor leaves the setting alone, and it runs. The runtime is `.NET 10` at either TFM, so `net8.0` would only mean compiling against an older BCL than the one executing — and one that leaves support in November 2026 (§1.4). Export is the one leg still unverified, and E18-01 verifies it |
+| Target framework, now that the .NET 10 SDK is installed | **`net10.0` everywhere, overriding the `net8.0` Godot generates.** Measured, not assumed: it builds, Godot's own build path builds it, the editor leaves an already-set value alone, and it runs. The runtime is `.NET 10` at either TFM, so `net8.0` would only mean compiling against an older BCL than the one executing — and one that leaves support in November 2026 (§1.4). **Held in `Directory.Build.props` for five projects and in `Dlo.Game.csproj` for the sixth**, because Godot re-adds a missing TFM line and the project body beats the props file (§1.4, E14-03). Export is the one leg still unverified, and E18-01 verifies it |
 | Does `Dlo.Domain` stay on `netstandard2.1`? | **No — `net10.0`, same as everything else.** It had no consumer outside this repo, and it was what forced the `IsExternalInit` declaration for `readonly record struct`. That workaround is deleted rather than documented |
 
 ---

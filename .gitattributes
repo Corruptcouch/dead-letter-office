@@ -1,0 +1,83 @@
+# Line endings, and what is binary. E14-08 owns this file.
+#
+# ── Why the line below is load-bearing ──────────────────────────────────────
+#
+# LF in the repository AND in the working tree, on every platform. `core.autocrlf`
+# is a per-machine setting, and this project cannot depend on four developers
+# configuring it identically - .gitattributes is the only mechanism that makes a
+# Windows clone and a Linux clone produce the same diffs.
+#
+# It is also a build gate, not a tidiness preference. `.editorconfig` sets
+# `end_of_line = lf`, and `dotnet format --verify-no-changes` (E14-02, and a CI step
+# in E14-07) fails with ENDOFLINE errors against a CRLF working tree. Measured on
+# 2026-08-24 with `core.autocrlf=true` and no .gitattributes: converting one .cs file
+# to CRLF failed the format check with exit 2. Left alone, that means CI on Linux
+# passes while a fresh Windows clone fails - the worst shape a build failure can take,
+# because the machine that reports green is not the machine anyone is working on.
+#
+# There is no tool-churn cost. Every generator in the chain already writes LF: Godot
+# writes project.godot, .tscn, .uid and the Dlo.Game.csproj it generates as LF, and
+# `dotnet new sln` / `dotnet sln add` write LF. No CRLF exception is needed anywhere,
+# which is why there is not one below.
+
+* text=auto eol=lf
+
+# ── Godot and content: text, and it has to stay text ────────────────────────
+#
+# `.tres` is deliberately NOT in LFS (arch §7). Content files must stay diffable or
+# E13's authoring pipeline loses code review entirely - a routing policy you cannot
+# read in a PR is a routing policy nobody checks. A careless LFS wildcard is exactly
+# how that breaks, so the content formats are marked explicitly here rather than left
+# to Git's binary detection.
+#
+# `.import` sidecars stay tracked and diffable too: they carry the stable `uid://`
+# that `.tres` content files resolve against (see .gitignore).
+
+*.tres          text
+*.tscn          text
+*.godot         text
+*.import        text
+*.uid           text
+*.cfg           text
+*.gd            text
+*.gltf          text
+
+# ── Source, build and docs ──────────────────────────────────────────────────
+
+*.cs            text diff=csharp
+*.csproj        text
+*.props         text
+*.targets       text
+*.sln           text
+*.json          text
+*.md            text
+*.yml           text
+*.yaml          text
+.editorconfig   text
+.gitattributes  text
+.gitignore      text
+
+# ── Git LFS: binary art and audio ───────────────────────────────────────────
+#
+# Wider than what the repo contains today, on purpose. A binary committed outside LFS
+# cannot be un-committed without rewriting history, so the cost of listing a format
+# early is one line and the cost of listing it late is a history rewrite. This is one
+# of the few places where guessing ahead is cheaper than waiting for the need.
+#
+# Most placeholder .png and .wav never reach LFS at all: E17-03 generates them before
+# the build and .gitignore excludes them, so a fresh clone works with no `git lfs pull`
+# whatsoever. LFS is here for commissioned art - authored, not derived, and therefore
+# not regenerable.
+
+*.png           filter=lfs diff=lfs merge=lfs -text
+*.jpg           filter=lfs diff=lfs merge=lfs -text
+*.jpeg          filter=lfs diff=lfs merge=lfs -text
+*.exr           filter=lfs diff=lfs merge=lfs -text
+*.wav           filter=lfs diff=lfs merge=lfs -text
+*.ogg           filter=lfs diff=lfs merge=lfs -text
+*.mp3           filter=lfs diff=lfs merge=lfs -text
+*.glb           filter=lfs diff=lfs merge=lfs -text
+*.fbx           filter=lfs diff=lfs merge=lfs -text
+*.blend         filter=lfs diff=lfs merge=lfs -text
+*.ttf           filter=lfs diff=lfs merge=lfs -text
+*.otf           filter=lfs diff=lfs merge=lfs -text

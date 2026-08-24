@@ -80,10 +80,14 @@ problem this architecture already solved a different way.
 **Godot generates `net8.0` and we override it, deliberately.** Godot 4.7.2's project template
 hardcodes `net8.0` and GodotSharp ships against it, but that is Godot's floor, not a ceiling —
 `net10.0` was measured working end to end: it builds, Godot's own `--build-solutions` builds it,
-the editor does not rewrite the setting, and it runs. The runtime is `.NET 10` either way, since
-Godot's host rolls forward to the newest major installed (arch §1.4). Targeting `net8.0` would
-mean compiling against an older BCL than the one actually executing, and adopting a framework
-that leaves support in November 2026 — before this project ships.
+the editor does not rewrite a setting that already has a value, and it runs. The runtime is
+`.NET 10` either way, since Godot's host rolls forward to the newest major installed (arch §1.4).
+Targeting `net8.0` would mean compiling against an older BCL than the one actually executing, and
+adopting a framework that leaves support in November 2026 — before this project ships.
+
+**Where the override lives is not a style choice.** `Directory.Build.props` holds it for the five
+hand-authored projects; `Dlo.Game.csproj` holds its own copy because Godot re-adds a *missing*
+TFM line as `net8.0` and the project body beats the props file (§2, arch §1.4).
 
 **The editor version is pinned.** On the development machine it lives at
 `D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`; **that path is machine-local and belongs in the
@@ -99,6 +103,11 @@ README, not in a rule** — each machine records its own (epics E14).
   written against, and there is nowhere else that documents it. Definition of Done requires it.
 - **Formatting is `.editorconfig`'s job, not review's.** If a formatting question reaches a
   human, the `.editorconfig` is missing a rule. Fix the file, not the PR.
+- **`using Godot;` shadows BCL type names, and the compiler reports it as your mistake.**
+  `Environment` is the one that bites first — `Godot.Environment` is the 3D world environment
+  resource, so bare `Environment.Version` is `CS0104: ambiguous reference`. Spell out
+  `System.Environment`. Expect the same from any short BCL name Godot also uses; reach for the
+  `System.` prefix rather than deleting `using Godot;`. (E14-03)
 - `dotnet build` and the test suites are the gates. There is no CLI warning gate in the Game
   layer, so the enforced gate there is the suite — do not let the IDE warning list accumulate
   noise, because that is where a real warning goes to hide.
@@ -153,6 +162,11 @@ Rules:
 - **Custom MSBuild config lives in `Directory.Build.props`, never in `Dlo.Game.csproj`.** Godot
   regenerates that file: project references survive, custom properties do not. (house,
   arch §1.4)
+- **The one exception is `<TargetFramework>`, and it is not optional.** Godot re-adds that line
+  as `net8.0` whenever it is missing, and MSBuild imports `Directory.Build.props` *before* the
+  project body — so the returned `net8.0` would win. `Dlo.Game.csproj` carries an explicit
+  `net10.0`; everything else takes it from the props file. Do not "tidy" it away (arch §1.4,
+  E14-03).
 - **`project/solution_directory="../.."` stays in `project.godot`.** Without it the exporter
   looks for the solution beside `project.godot` and refuses every C# source during export.
   (house, arch §1.4)
