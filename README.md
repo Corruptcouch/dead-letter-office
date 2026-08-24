@@ -43,9 +43,12 @@ Three levels (arch §10.1). Run from the repo root.
 | **L2** | GdUnit4, in engine | *arrives with E14-05* | seconds |
 | **L3** | Headless host + 3 clients | *arrives with E0-09* | minutes |
 
-**L1 baseline, measured on the development machine 2026-08-24 with 2 tests in the suite:**
-20 ms of test execution; 2.5 s wall clock for `dotnet test` from a cleaned `bin`/`obj`,
-1.3 s with `--no-build`. The budget is the suite, and the suite has 4.98 s of headroom left.
+The **architecture test** (arch §10.5 — `Dlo.Domain` does not reference `GodotSharp`) is an
+L1 test and needs no invocation of its own. It runs with the command above.
+
+**L1 baseline, measured on the development machine 2026-08-24 with 3 tests in the suite:**
+24 ms of test execution; 2.4 s wall clock for `dotnet test` from a cleaned `bin`/`obj`,
+1.3 s with `--no-build`. The budget is the suite, and the suite has 4.97 s of headroom left.
 The number is recorded here so the next measurement is a comparison rather than an argument.
 
 ## Formatting
