@@ -219,3 +219,22 @@ dotnet_naming_rule.parameters_and_locals_are_camel_case.severity = warning
 # stays because the convention standards §8 mandates should not depend on that
 # implementation detail staying lenient.
 dotnet_naming_rule.methods_are_pascal_case.severity = none
+
+# ---------------------------------------------------------------------------
+# Generated code
+# ---------------------------------------------------------------------------
+
+# GdUnit4 reinstalls this file into the L2 Godot project on every run (E14-05), as
+# UTF-8-with-BOM, CRLF, with its usings inside the namespace. All three break the rules
+# above, and none of them are ours to fix - the next run overwrites whatever we change.
+#
+# Per the header of this file, a formatting question that reaches a human means this file
+# is missing a rule. This is that rule. `dotnet format --verify-no-changes` stays the gate
+# and stays clean, and the command in the README needs no exclusion flag.
+[**/gdunit4_testadapter_v5/*.cs]
+generated_code = true
+end_of_line = crlf
+charset = utf-8-bom
+csharp_using_directive_placement = inside_namespace:none
+dotnet_diagnostic.IDE0065.severity = none
+dotnet_diagnostic.IDE0005.severity = none

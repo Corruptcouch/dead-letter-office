@@ -29,8 +29,12 @@
       Export is the one leg still unverified - it needs 4.7.2 export templates, which
       are not installed. E18-01 verifies it, and is where the finding goes if it fails.
 
-      This file is the authority for the five hand-authored projects. Dlo.Game is the
-      exception, and it has to be - measured during E14-03, 2026-08-24:
+      This file is the authority for every project that is NOT a Godot project. There are
+      two that are - src/Dlo.Game and tests/Dlo.Game.Tests, each with a project.godot beside
+      it - and both carry their own explicit net10.0. They have to, and it has to be - first
+      measured during E14-03, then watched happening again during E14-05, when the GdUnit4
+      adapter launched the editor against the test project and that csproj grew a net8.0 line
+      mid-run, in CRLF:
 
         - MSBuild imports this file *before* the project body, so a TargetFramework
           line inside a .csproj beats this one.
@@ -39,10 +43,10 @@
         - Godot does not touch the line once it has a value. It only fills in an
           absent one.
 
-      So Dlo.Game.csproj carries an explicit net10.0 of its own, and that is what makes
-      the override stick. Arch §1.4's "the editor does not rewrite <TargetFramework>"
-      is accurate but only tells half the story - it does not rewrite a value, and it
-      does re-add a missing line.
+      So each Godot project's csproj carries an explicit net10.0 of its own, and that is what
+      makes the override stick, and any future Godot project here needs the same line.
+      Arch §1.4's "the editor does not rewrite <TargetFramework>" is accurate but only tells
+      half the story - it does not rewrite a value, and it does re-add a missing line.
     -->
     <TargetFramework>net10.0</TargetFramework>
 

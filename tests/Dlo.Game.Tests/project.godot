@@ -1,0 +1,23 @@
+; L2 harness project (E14-05).
+;
+; GdUnit4's adapter runs `godot --path . -s res://gdunit4_testadapter_v5/...`, so the
+; directory holding the test assembly has to BE a Godot project - without one, the adapter
+; silently runs the suite in the plain VSTest host and every native call segfaults with
+; 0xC0000005. Arch §1.3 puts this project at tests/Dlo.Game.Tests/, so the project file
+; comes to it rather than the tests moving into src/Dlo.Game/.
+
+config_version=5
+
+[application]
+
+config/name="Dlo.Game.Tests"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[dotnet]
+
+project/assembly_name="Dlo.Game.Tests"
+project/solution_directory="../.."
+
+[physics]
+
+3d/physics_engine="Jolt Physics"

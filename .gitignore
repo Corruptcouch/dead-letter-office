@@ -101,3 +101,11 @@ desktop.ini
 *.tmp
 *.temp
 *.log
+
+# Godot's backup when it rewrites a .csproj it did not like (E14-05 watched it happen
+# live, mid-test-run). Regenerated freely, never worth a diff.
+*.csproj.old
+
+# GdUnit4's generated Godot-runtime test runner. The adapter installs it into whichever
+# Godot project it is running, on every run (E14-05).
+gdunit4_testadapter_v5/

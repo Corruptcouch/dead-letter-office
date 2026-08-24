@@ -26,6 +26,16 @@ ever catch:
   as disagreement between peers rather than as an error. *(Zero lines is also correct until
   E0-04 lands.)*
 
+- [ ] **The transport seam still holds** (arch §3.5, E0-02) — no engine or SDK networking
+  type outside `src/Dlo.Game/Net/`:
+
+  ```
+  grep -rn --include=*.cs -E "ENetMultiplayerPeer|ENetConnection|SteamMultiplayerPeer|Steamworks|CSteamID|SteamAPI" src/ tests/ tools/ | grep -v "^src/Dlo.Game/Net/"
+  ```
+
+  Expect **no output**. This is what keeps E0-03 a drop-in instead of a migration, and it is
+  the only thing standing between E0-01's Steam risk and the rest of the codebase.
+
 - [ ] Anything asymmetric-information-shaped has a **negative** test (arch §10.4, standards
   §8). Nothing looks broken when a client knows too much, so this is the one that regresses
   silently.

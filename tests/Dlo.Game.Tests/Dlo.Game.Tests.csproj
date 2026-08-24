@@ -1,6 +1,27 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Godot.NET.Sdk/4.7.2">
 
-  <!-- GdUnit4 and the ProjectReference to Dlo.Game arrive with E14-05; the Godot
-       project that reference points at does not exist until E14-03. -->
+  <!--
+    Explicit net10.0, and it has to live here rather than in Directory.Build.props.
+
+    project.godot sits beside this file, so this is a Godot project and Godot re-adds a
+    MISSING TargetFramework line as net8.0. Observed live during E14-05: the test adapter
+    launched the editor and this file grew a net8.0 line, in CRLF, mid-run. MSBuild imports
+    Directory.Build.props before the project body, so the returned line would win.
+
+    Same rule and same reason as src/Dlo.Game/Dlo.Game.csproj (arch §1.4). Do not tidy it away.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="gdUnit4.api" Version="5.0.0" />
+    <PackageReference Include="gdUnit4.test.adapter" Version="3.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Dlo.Game/Dlo.Game.csproj" />
+  </ItemGroup>
 
 </Project>
