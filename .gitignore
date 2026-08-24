@@ -1,7 +1,7 @@
 # Dead Letter Office
 #
 # Two rules for editing this file:
-#   1. No Godot 3 entries. This project targets Godot 4.6 only and there is no
+#   1. No Godot 3 entries. This project targets Godot 4.7 only and there is no
 #      compatibility target (docs/CODING-STANDARDS.md §1.1). Most .gitignore
 #      snippets you will find online are for Godot 3 and quietly bring
 #      `.mono/`, `data_*/` and `export.cfg` with them.

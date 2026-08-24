@@ -1,0 +1,1053 @@
+# Dead Letter Office — Story Breakdown
+
+**Status:** Draft v0.1 · Companion to the Vision, Architecture and Epic documents
+
+> **Scope of this pass: everything the MVP line needs, decomposed in full.** That is E14, E0,
+> E1, E2, E3, E4 and E12, plus the slices of E13, E15, E17, E18 and E19 that must run
+> *alongside* them rather than after them. **Tier 2 and later stay at the epic level** — E5, E6,
+> E7, E8, E9, E10, E11 and the remainder of the appended epics keep the one-line story lists the
+> epics document already gives them, and get decomposed when Gate 1 has reported.
+>
+> That boundary is deliberate, and it is rung 1 of `AGENTS.md`: **Gate 1 can invalidate a Tier 2
+> story, so writing acceptance criteria for one now is work done twice.** Gate 2 carries a
+> pre-approved held fix precisely because the design past that line is not settled yet.
+>
+> **Derived from** [dead-letter-office-epics.md](dead-letter-office-epics.md), which remains the
+> authority on what an epic contains and why. Where this document and the epics disagree about
+> *what* a story is for, the epics win. This document adds only acceptance criteria, test level,
+> dependencies, and the traps.
+
+---
+
+## How to use this document
+
+**Every story inherits, and therefore does not restate:**
+
+- The **Definition of Ready** and **Definition of Done** from the epics document.
+- The **Decisions already made** section of its epic. If a story raises a question that section
+  does not answer, **that is a gap in the epics document** — record it in
+  [Gaps this decomposition surfaced](#gaps-this-decomposition-surfaced) and get it answered once,
+  at the epic level. Do not answer it privately inside a story.
+- The review checklist in [`CODING-STANDARDS.md`](CODING-STANDARDS.md) §12, in full.
+- Arch §8's budgets. They are rules, not advice.
+
+**Test levels** are Arch §10.1: **L1** xUnit no engine · **L2** GdUnit4 in engine · **L3**
+headless multi-peer. A story marked *spike* produces a written finding and throwaway code; one
+marked *build only* is proved by the build, per `AGENTS.md` on trivia.
+
+**`(post-MVP)`** on a title means the story belongs to its epic but is **not** required to reach
+Gate 1 — vision §15 defers it. Build it when the epic is otherwise done and no gate is waiting.
+
+**Dependencies are story-level, and they are the only sequencing signal here.** There are no
+estimates, deliberately. Walk the graph; [the first ten stories](#the-first-ten-stories-in-order)
+are already walked for you.
+
+---
+
+## Tier 0 — Spine
+
+### E14 — Foundation and conventions
+
+*A repo any developer can clone, build and test in under ten minutes.*
+
+#### E14-01 · Solution scaffold
+**Depends:** — · **Test:** build only
+
+Create `dlo.sln` and the project layout of Arch §1.3 exactly: `src/Dlo.Domain`,
+`tests/Dlo.Domain.Tests`, `tests/Dlo.Game.Tests`, `tests/Dlo.Net.Tests`, `tools/Dlo.ContentTool`.
+
+- [ ] `dotnet build dlo.sln` succeeds on a fresh clone with no manual step.
+- [ ] `Dlo.Domain` targets `net10.0` and has zero package references.
+- [ ] The layout matches Arch §1.3, including `tools/`, which nothing uses yet.
+
+*`Dlo.Game.csproj` is not hand-authored — Godot generates it in E14-03 and regenerates it forever
+after (Arch §1.4).*
+
+#### E14-02 · `.editorconfig`, `Directory.Build.props`, `global.json`
+**Depends:** E14-01 · **Test:** build only
+
+- [ ] `global.json` pins **an exact .NET 10 SDK version**, not "10". The development machine has
+      four SDKs installed — 8.0.424, 9.0.315, 10.0.204 and 10.0.400 — and with no pin, `dotnet`
+      silently takes the highest. A build that differs between a developer and CI because nobody
+      chose is the failure this file exists to prevent.
+- [ ] **`net10.0` is set for every project in `Directory.Build.props`, with a comment saying why
+      it overrides Godot.** Godot 4.7.2 generates `net8.0` for `Dlo.Game`; we override it (Arch
+      §1.4, verified working). The comment is the acceptance criterion, not a nicety — without it
+      the next person sees the override, assumes it was a mistake, and reverts it back to what
+      Godot generates.
+- [ ] The override survives Godot: open the project in the editor, then confirm
+      `<TargetFramework>` is still `net10.0`. It was byte-identical when measured, and this is a
+      ten-second check that catches a future Godot version changing that behaviour.
+- [ ] Nullable is enabled everywhere; warnings-as-errors in **`Dlo.Domain` only** — proved by
+      introducing one warning in each project and observing exactly one failure. The Game layer
+      builds Godot's noisy generated glue, and failing on it means nobody can build.
+- [ ] `dotnet format --verify-no-changes` passes and is the formatting authority.
+- [ ] Every custom MSBuild property lives in `Directory.Build.props` at the repo root, because
+      Godot destroys anything put in `Dlo.Game.csproj` (Arch §1.4).
+
+#### E14-03 · Godot project, with Jolt set explicitly
+**Depends:** E14-01 · **Test:** build only
+
+- [ ] `src/Dlo.Game/project.godot` opens in **Godot 4.7.2-stable-mono** and the generated
+      `Dlo.Game.csproj` carries a project reference to `Dlo.Domain`.
+- [ ] `project/solution_directory="../.."` is set, or the exporter refuses every C# source at
+      export time (Arch §1.4).
+- [ ] `project.godot` contains `physics/3d/physics_engine="Jolt Physics"` **as a literal line in
+      the file.** A fresh 4.7.2 project leaves the setting at `DEFAULT`, which names a resolution
+      order rather than an engine — so "I checked and it looked fine" is not the criterion; the
+      string being in the file is. Every number in Arch §8 assumes Jolt.
+- [ ] An empty scene runs from the editor *and* from `godot --headless --quit`.
+
+*The editor is pinned at 4.7.2-stable-mono. On the development machine it is at
+`D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`; the path is machine-local, and E14-09's README is
+where each machine records its own.*
+
+#### E14-04 · xUnit harness and the first real test
+**Depends:** E14-01, E14-02 · **Test:** L1
+
+- [ ] `dotnet test tests/Dlo.Domain.Tests` runs green, and the invocation is in the README.
+- [ ] The suite completes in **under 5 s** (Arch §8) — measured now, while it is empty, so the
+      number has a baseline to regress from.
+- [ ] The first test asserts a real value on a real Domain type. `Assert.True(true)` is not a
+      harness check, it is a harness lie.
+
+#### E14-05 · GdUnit4 harness
+**Depends:** E14-03 · **Test:** L2
+
+- [ ] A GdUnit4 test runs both in-editor and headless from the CLI; both invocations are in the
+      README.
+- [ ] The first test makes one real assertion against a node.
+
+#### E14-06 · The architecture test
+**Depends:** E14-04 · **Test:** L1
+
+- [ ] Arch §10.5's assertion, verbatim: `Dlo.Domain` does not reference `GodotSharp`.
+- [ ] **Proved by breaking it** — add the reference, watch it go red, revert (Standards §8).
+- [ ] The PR template carries the check no test can do: a `grep` for a second `new ShiftDirector`
+      or `new ShiftLedger` outside `SessionRoot` (Arch §3.2).
+
+#### E14-07 · CI workflow
+**Depends:** E14-04, E14-05, E14-06 · **Test:** build only
+
+- [ ] On every push: restore, build, L1, L2, architecture test, `dotnet format --verify-no-changes`.
+- [ ] CI is green on an empty commit **and red on a deliberately failing test** — push one, watch
+      it fail, revert. A pipeline nobody has seen fail is not known to work.
+- [ ] L3 and `ContentTool validate` are not here yet; they arrive with E0-09 and E13-06. L3 runs
+      on merge to main only, because it is minutes rather than seconds (Arch §10.6).
+
+#### E14-08 · Git LFS and `.gitattributes`
+**Depends:** E14-01 · **Test:** build only
+
+- [ ] `.png`, `.wav`, `.ogg`, `.glb` are LFS-tracked.
+- [ ] **`.tres` is provably not** — check one in and confirm the diff is readable text (Arch §7).
+      This is the criterion a careless wildcard breaks, and it breaks E13 with it.
+- [ ] Line endings are normalised, so a Windows clone and a Linux clone produce identical diffs.
+- [ ] The README describes what a clone that skipped `git lfs pull` looks like — E17's
+      generated-placeholder decision makes that state rare enough to be baffling when it happens.
+
+*The `.gitignore` is already written for this project and is not part of this story.*
+
+#### E14-09 · README
+**Depends:** E14-04, E14-05, E14-07 · **Test:** build only
+
+- [ ] A developer with nothing installed reaches "built, both suites green" in **under ten
+      minutes** following only this file — timed against someone who has not done it before.
+- [ ] Every test-level invocation is named: L1, L2, and L3 once it exists. Standards §8 makes a
+      missing invocation **an E14 defect**, which is why it has an owner rather than a convention.
+- [ ] Arch §1.4's gotchas are listed, including that C# hot reload does not pick up Domain changes
+      and the fix is restarting the editor. That one costs an afternoon per developer who has to
+      discover it alone.
+- [ ] **The pinned editor version is stated — 4.7.2-stable-mono — and the local install path is
+      where each machine records its own.** The development machine's is
+      `D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`. A version mismatch between developers shows
+      up as `project.godot` churn and export failures, not as a build error.
+- [ ] **Export templates for the pinned version must be installed**, and the README says so —
+      this is the step that is missing on the current machine (epics open item 10).
+
+---
+
+### E0 — Netcode Spine
+
+*Host-authoritative from the first line of gameplay code, and an honest answer on Steam.*
+
+#### E0-01 · Steam C# path spike — **do this first**
+**Depends:** E14-03 · **Test:** spike · **Answers:** epics open item 1, Arch open item 1
+
+The largest open risk in the project, and the only one whose answer changes the shape of an epic.
+Timebox it, and write the finding down where someone can find it in six months.
+
+- [ ] Four peers connect over the C# `SteamMultiplayerPeer` path and exchange an RPC in both
+      directions, against a real Steam app id.
+- [ ] A client disconnect and a host teardown are both survived.
+- [ ] The finding names **the exact fork and commit** of the bindings that worked, and states
+      whether the missing channels implementation matters at our packet volume and shape.
+- [ ] A written recommendation: use it, fork and maintain it, or change E12's shape — and on a
+      negative finding, **what E12 becomes**, not merely that it is a problem.
+- [ ] Filed as the input to ADR 0004 (Arch §12).
+
+*Blast radius is E12 and E18 only. The voice decision removed E7 from it (epics E7), which is the
+entire reason that decision was worth making.*
+
+#### E0-02 · `IGameTransport` and `EnetTransport`
+**Depends:** E14-03 · **Test:** L2
+
+- [ ] The interface is Arch §3.5's two methods. Not more — a transport that also knows about
+      lobbies is E12 leaking downward.
+- [ ] ENet host and client both work locally.
+- [ ] **No file outside the two transport implementations names an ENet or a Steam type** — a grep
+      in review proves it, and it is what makes E0-03 a drop-in rather than a migration.
+
+#### E0-03 · `SteamTransport`
+**Depends:** E0-01, E0-02 · **Test:** L2 + one manual four-peer check
+
+- [ ] Satisfies `IGameTransport` with no gameplay code change anywhere.
+- [ ] Transport is selected by configuration: **ENet is the development and test default; Steam is
+      the shipping default** (epics E0).
+- [ ] Four peers exchange an intent RPC and a replicated value over Steam — manual, recorded once,
+      because L3 runs against ENet forever.
+
+#### E0-04 · Session lifecycle and the `SessionRoot` seam
+**Depends:** E0-02 · **Test:** L2, later L3
+
+- [ ] Host, join, leave and teardown all work over `IGameTransport`.
+- [ ] `SessionRoot._Ready` is **the only place in the codebase that constructs a domain system**,
+      behind exactly one `Multiplayer.IsServer()` branch (Arch §3.2).
+- [ ] `HostSession` receives its systems as constructor arguments so L1 can substitute stubs; it
+      never builds them internally.
+- [ ] `grep -rn "new ShiftDirector\|new ShiftLedger" src/` returns exactly one line, and that grep
+      is in the review checklist because no test can catch the second one.
+
+#### E0-05 · `MultiplayerSpawner` wrapper with a custom spawn function
+**Depends:** E0-04 · **Test:** L2
+
+- [ ] Spawning takes a small explicit args struct, never a whole record — the payload is a
+      deliberate decision at every call site (Arch §5.2).
+- [ ] A client builds a node from spawn args alone, with no additional round trip.
+- [ ] Adding a spawnable type requires no change to the wrapper.
+
+#### E0-06 · Replication classes — synchronizer configuration
+**Depends:** E0-04 · **Test:** L2
+
+The mechanism only. Parcels start using it in E2-05.
+
+- [ ] Three named configurations exist with **distinct `replication_interval` values**, set per
+      class rather than globally (Arch §3.4).
+- [ ] A node can be promoted and demoted between classes at runtime without respawning.
+- [ ] Every RPC this story introduces states `TransferMode` and `CallLocal` deliberately. Nothing
+      positional is `Reliable`, and `CallLocal = false` on an intent the host must also honour is
+      a silent no-op on one machine in four (Arch §3.1).
+
+#### E0-07 · `LatencyPeer` development decorator
+**Depends:** E0-02 · **Test:** L2
+
+Vision §15's question says *over real internet*. Without this, the MVP answers an easier question
+than the one that matters — which makes this **required infrastructure, not a nicety** (Arch §3.5).
+
+- [ ] Configurable fixed delay plus jitter, wrapping any `MultiplayerPeer`.
+- [ ] Enabled by flag, and **impossible to enable in a shipping build** — an export guard or a
+      startup assertion, not a convention.
+- [ ] Carries Arch §3.5's `ponytail:` comment verbatim: ceiling *and* upgrade path. A `ponytail:`
+      with only one half is a TODO in a costume, and Definition of Done rejects it.
+
+#### E0-08 · L3 harness feasibility spike
+**Depends:** E14-05, E0-02 · **Test:** spike · **Answers:** epics open item 5, Arch open item 4
+
+- [ ] A written answer to **four processes or four `SceneTree`s**, with a working proof of the one
+      chosen.
+- [ ] The wall-clock cost of a trivial four-peer connect test is measured — a suite that takes
+      twenty minutes is a suite that gets skipped, and therefore is not a suite.
+- [ ] The chosen approach runs headless with no GPU on CI hardware, not only on a developer
+      machine with a display attached.
+
+#### E0-09 · The `Dlo.Net.Tests` L3 harness
+**Depends:** E0-08, E0-04 · **Test:** L3
+
+- [ ] Boots a headless host and three headless clients over `EnetTransport`.
+- [ ] Asserts an intent RPC arrives and a replicated value converges.
+- [ ] Tears down leaving **no orphaned processes**. A leaked peer poisons the next run and
+      presents as flakiness, which is how a suite loses its credibility.
+- [ ] A failure message names **which peer disagreed and what it held**. An L3 failure that says
+      only `Assert.Equal failed` costs an hour every single time it fires.
+- [ ] Wired into CI on merge to main (Arch §10.6).
+
+#### E0-10 · Disconnect and host-loss teardown
+**Depends:** E0-09 · **Test:** L3
+
+- [ ] A client disconnecting leaves the host and the remaining clients running, with no orphaned
+      nodes and no exceptions.
+- [ ] A host teardown ends every client's session cleanly.
+- [ ] Both asserted at L3, including that the survivors **keep functioning afterwards** — "did not
+      crash" is not the assertion; "still works" is.
+
+*This story stops at "the session ended cleanly." The player-facing message and the return to
+lobby are E12-05 — see the gap recorded about this split.*
+
+---
+
+### E1 — Embodiment
+
+*A controller that is tight, in a world that is not.* **Gate 0 lives here.**
+
+#### E1-01 · Jolt joint stability spike — two-person carry
+**Depends:** E14-03 · **Test:** spike, leaving one L2 regression scene · **Answers:** epics open
+item 4, Arch open item 3
+
+Do this before E1-04, not before E1-08. If heavy bodies on joints are unstable, the *grab* design
+changes, not just the co-op carry.
+
+- [ ] A heavy body held by two joints from two characters does not explode, jitter or tunnel at
+      Jolt's default substep count.
+- [ ] The finding names **the mass and stiffness envelope that stays stable**, and what happens
+      outside it.
+- [ ] If it is unstable, the finding names the fix — substeps, joint type, mass-ratio ceiling —
+      *before* E1-08 starts rather than during it.
+- [ ] One L2 scene is kept as a regression check, so a physics-settings change that breaks this
+      fails a test rather than a playtest.
+
+#### E1-02 · First-person controller — move, look, jump, crouch
+**Depends:** E14-03 · **Test:** L2
+
+- [ ] Move, look, jump and crouch are local and immediate on all four machines: **0 frames of
+      network wait** (Arch §8), measured rather than assumed.
+- [ ] **No input damping anywhere.** Not on movement, not on the camera, not on look sensitivity,
+      not "only while carrying something heavy." It is banned (Arch §6.1), and it is the specific
+      mistake that makes this game read as broken instead of funny.
+- [ ] The character body's multiplayer authority is the owning peer — **see the gap recorded on
+      authority; do not treat this bullet as the ruling.**
+
+#### E1-03 · Hands and IK
+**Depends:** E1-02 · **Test:** L2
+
+- [ ] Godot 4.7's `TwoBoneIK3D` / `FABRIK3D` is used **before** any procedural arm code is written
+      (`AGENTS.md` rung 3, Standards §10).
+- [ ] Hands visibly reach the grip point of the held object on every peer, not only the holder's.
+- [ ] Hand pose is **derived** from held-object plus character state, never replicated per frame.
+      Hands are the easiest accidental bandwidth leak in the build.
+
+#### E1-04 · The grab joint, host-side
+**Depends:** E1-01, E1-03, E0-04 · **Test:** L2
+
+- [ ] The real joint exists **only on the host**. A client never creates a physics joint (Arch §3.3).
+- [ ] `RequestGrab` validates range, current holder and policy lock before resolving.
+- [ ] `GrabResolved` names the winning holder and is `Reliable` — it is a decision, not a stream.
+- [ ] Weight is expressed **only** through Jolt mass and joint compliance.
+
+#### E1-05 · Optimistic client attach
+**Depends:** E1-04 · **Test:** L2, confirmed at L3 by E1-06
+
+- [ ] Hand animation and a **visual-only** attachment happen on the same frame as the button press,
+      at any latency — including under `LatencyPeer` at 200 ms.
+- [ ] On denial the parcel snaps out of the hands: no error state, no stuck animation, no
+      re-request loop.
+- [ ] A comment states this is **the only optimistic path in the build** and why, citing Arch §3.3,
+      so the next developer does not generalise it to stamping, opening or incinerating — where a
+      rollback would un-decide something the report already recorded.
+
+#### E1-06 · Grab contention resolution
+**Depends:** E1-05, E0-09 · **Test:** L3
+
+- [ ] Two clients grabbing the same parcel in the same frame resolve to **exactly one** holder
+      (Arch §10.4).
+- [ ] The loser's client releases cleanly, with no orphaned visual joint.
+- [ ] The loser **sees the parcel move toward the winner** — it does not teleport, and it does not
+      end up inside geometry. The mispredicted case is supposed to read as *a teammate yanked it
+      away*, and that only works if it looks like that.
+
+#### E1-07 · Carry and throw
+**Depends:** E1-04 · **Test:** L2
+
+- [ ] Carrying something bulky obstructs vision and movement **through the object's own geometry
+      and mass**, never through an input modifier.
+- [ ] Throw impulse derives from mass, so a heavy parcel is a bad projectile without a special case.
+- [ ] Dropping is always available and never blocked by a state machine. A player who cannot let go
+      is a player fighting the input.
+
+*Until E2-05 exists, thrown parcels are ordinary dynamic bodies. Replication-class behaviour
+arrives there, not here.*
+
+#### E1-08 · Two-person cooperative carry
+**Depends:** E1-01, E1-04 · **Test:** L2, later L3
+
+- [ ] An object the domain marks as over one-person capacity **cannot** be lifted by one player and
+      **can** be by two — two host-owned joints on one body (Arch §3.3).
+- [ ] The configuration stays inside E1-01's stable envelope.
+- [ ] When one carrier lets go, the object **drops**. It does not launch, and it does not teleport
+      to the remaining carrier.
+
+*Capacity is a domain fact. Until `ParcelRecord` exists (E2-01) it lives on a placeholder body;
+moving it there is a rename, and E2-01 owns it.*
+
+#### E1-09 · Stumble and trip
+**Depends:** E1-07 · **Test:** L2
+
+- [ ] Stumbling is caused by **the world** — uneven floor, a collision, an oversized load — never by
+      a random timer or an input lockout.
+- [ ] Recovery is immediate and controllable. A stumble that takes control away for a second is
+      unresponsive input wearing a costume, which is exactly the failure vision §3.1 names.
+
+#### E1-10 · **Gate 0 — the feel session**
+**Depends:** E1-07, E1-09, E15-04, E19-02 · **Test:** playtest, not a suite (Arch §10.3)
+
+- [ ] One player, local, picks up, carries, throws and drops a heavy awkward box.
+- [ ] Their words are recorded **verbatim**. The finding is which word arrives unprompted:
+      *awkward* or *broken*. Not a score out of five.
+- [ ] A written go/no-go, filed in E19-06's register.
+- [ ] **On a fail, E1 is fixed before any other feature work starts** (epics gate table). A pass
+      here does not authorise Gate 1's scope.
+
+---
+
+## Tier 1 — The Job
+
+### E2 — The Parcel
+
+*A data carrier with a physical body, whose identity outlives both.*
+
+#### E2-01 · `ParcelId`, `ParcelRecord`, `ParcelRegistry`
+**Depends:** E14-04 · **Test:** L1
+
+- [ ] `ParcelId` is a host-assigned `readonly record struct` over a `uint` (Arch §5.1).
+- [ ] `ParcelRegistry` maps id → record and is **the only owner of parcel state**.
+- [ ] **No gameplay state on any node** — a node is a view of a record (Standards §12). E2-02 is the
+      test that proves it.
+- [ ] XML docs on every public Domain member, with `<see cref="..."/>` that resolves so the Game
+      layer gets working hover text.
+- [ ] No Godot type in any signature, `Vector3` included — Domain has its own `Vec3`. This is the
+      rule most likely to be broken by accident (Standards §0).
+
+#### E2-02 · Identity survives the node being freed
+**Depends:** E2-01, E0-05 · **Test:** L2
+
+- [ ] Freeing a parcel's node leaves the record intact and addressable by `ParcelId`.
+- [ ] Re-spawning from that id restores manifest, tamper state and culpability.
+- [ ] The test **proves the node was actually freed**, not merely hidden — otherwise it passes for
+      the wrong reason forever, and it is the load-bearing test for tube transit and pooling both.
+
+#### E2-03 · The manifest model
+**Depends:** E2-01, E13-02 · **Test:** L1
+
+Manifest, address, destination code, weight, fragility, declared contents.
+
+- [ ] Every field is a Domain type, and the whole model serialises to a payload **containing no
+      engine type** (Standards §9).
+- [ ] An address either parses to a routable destination or is **rejected at content load**
+      (E13-02's grammar) — never discovered at routing time, mid-shift.
+- [ ] Variation is data. Adding an archetype does not add a class (Arch §4.1).
+
+#### E2-04 · Spawn args and the custom spawn function
+**Depends:** E2-01, E0-05 · **Test:** L2 + L3 negative
+
+- [ ] `ParcelSpawnArgs(uint Id, byte Archetype, byte Size, byte Condition)` — Arch §5.2's shape.
+- [ ] **The manifest is not in the payload**, and a negative test inspects the serialised bytes to
+      prove it. This is not an optimisation; it is E3-06's enforcement beginning at spawn time.
+- [ ] A client builds a box that looks right — correct size, archetype, visible condition — from
+      spawn args alone.
+
+#### E2-05 · Three replication classes, with promotion and demotion
+**Depends:** E2-04, E0-06, E4-01 · **Test:** L2 + L3
+
+- [ ] `Railed` sends `(beltId, distanceAlong, lane)` **once, on entry**, and produces zero ongoing
+      traffic; clients extrapolate (Arch §3.4).
+- [ ] `Dynamic` replicates transform as `UnreliableOrdered`.
+- [ ] `Sleeping` sends one final transform when Jolt reports sleep, then nothing at all.
+- [ ] Knocking a railed parcel off the belt promotes it; letting it settle demotes it — **both
+      directions asserted.**
+- [ ] **A belt parcel in `Dynamic` fails a test.** Arch §3.4 calls that a bug against the section,
+      so it earns an assertion rather than a code review.
+
+#### E2-06 · Object pooling
+**Depends:** E2-02 · **Test:** L2
+
+- [ ] Parcels are pooled, never `QueueFree`d (Standards §10). They are the highest-churn object in
+      the game and the belt never stops.
+- [ ] A recycled node carries **nothing** over — proved by mutating every mutable field before
+      release and asserting defaults after acquire, not by reading the code and being satisfied.
+- [ ] Pool growth is bounded and logged, so "the belt never stops" cannot quietly become "the pool
+      never stops."
+
+#### E2-07 · Openable parcels and tamper state *(post-MVP)*
+**Depends:** E2-03 · **Test:** L1 + L2
+
+- [ ] `RequestOpen` is host-validated and **never optimistic** — it is irreversible and it is a
+      policy violation (Arch §5.4). The grab exception does not extend here.
+- [ ] Tamper state is permanent, and survives tube transit, pooling and node recycling.
+- [ ] Opening writes a ledger entry carrying the actor.
+
+#### E2-08 · Declared versus actual contents *(post-MVP)*
+**Depends:** E2-07 · **Test:** L1 + L3 negative
+
+- [ ] `ActualContents` exists on the record from authoring time.
+- [ ] **No client receives it before the box is open** — an L3 anti-assertion, and the easiest kind
+      of thing in this design to regress silently (Standards §8).
+- [ ] A declaration/reality mismatch is representable and detectable **without a new class**.
+
+#### E2-09 · L3 parcel identity test
+**Depends:** E2-05, E4-03, E0-09 · **Test:** L3
+
+- [ ] belt → grab → throw → tube → respawn preserves `ParcelId`, manifest and tamper state.
+- [ ] **Three separate assertions**, not one conjunction — a chained assert reports one useless fact
+      (Standards §8).
+- [ ] The test fails if node-held state is reintroduced anywhere along the chain.
+
+#### E2-10 · Replication budget measurement
+**Depends:** E2-05 · **Test:** measurement · **Answers:** epics open item 3, Arch open item 2
+
+- [ ] 40 awake parcel bodies plus a full belt, measured against Arch §8's **60 KB/s gameplay**
+      budget.
+- [ ] The number is **recorded in the repo** with the scenario that produced it, so the next
+      measurement is a comparison rather than a fresh argument.
+- [ ] If it exceeds budget, the finding names **which replication class is misbehaving**. It does
+      not propose a redesign — that is a separate conversation with the owner.
+
+---
+
+### E3 — The Work
+
+*Receive → inspect → scan → stamp → route, across four posts.* **Gate 2 lives here.**
+
+#### E3-01 · The post model
+**Depends:** E2-01, E4-05 · **Test:** L1 + L2
+
+- [ ] A post is an authored volume plus **the information class it grants** — not four hard-coded
+      classes (Arch §4.1, E13).
+- [ ] The host knows which post each player currently occupies, and that fact is what drives E3-06.
+- [ ] Working two posts at once is impossible by geometry, and E4-05 owns proving it.
+
+*Read the gap on what a post physically is before starting this one.*
+
+#### E3-02 · The scanner
+**Depends:** E3-01, E2-03 · **Test:** L2 + L3
+
+- [ ] Scanning is a `Request*` intent and the host decides (Standards §6).
+- [ ] A successful scan grants **the scanning client** the manifest and sets `HasBeenScanned`.
+- [ ] Scanning is what makes E3-06's filter observable, so this story and that one are verified
+      together or neither is verified at all.
+
+#### E3-03 · The stamp tool, including `INCINERATE`
+**Depends:** E3-01 · **Test:** L1 + L2
+
+- [ ] Stamping is **never optimistic** — it is a decision the report will record (epics E3).
+- [ ] Every stamp writes a ledger entry with actor and parcel.
+- [ ] The stamp is visible on the body to every peer: blame has to be legible in the moment as well
+      as on the report.
+- [ ] `INCINERATE` is available from the first build with **no confirmation dialog**. It is
+      deliberately available before it is wise (vision §3.5), and a safety prompt deletes the joke.
+
+#### E3-04 · `RoutingRules.Evaluate` and the L1 policy matrix
+**Depends:** E2-03, E13-03 · **Test:** L1
+
+The single most-tested function in the codebase, and the reason "did the shift score correctly?"
+never requires four peers and a controller.
+
+- [ ] Signature exactly `Evaluate(ParcelRecord, ChuteId, PolicyState)` — pure: no clock, no engine,
+      no side effects (Arch §4.5).
+- [ ] The matrix covers correct route · misroute · unknown destination · a destination whose chute
+      changed mid-shift · a parcel with no destination · a policy mapping one destination to two
+      chutes, which E13-03 should already make impossible (assert both ends of that).
+- [ ] `Misroute_is_not_revealed_until_the_whistle` exists and passes. **No live wrong-chute
+      indicator** — the delayed reveal is the blame engine's ammunition (Arch §4.4).
+- [ ] Nothing caches a routing answer across a `PolicyState` change (Standards §12).
+
+#### E3-05 · `PolicyState` and the routing chart
+**Depends:** E3-04, E15-02 · **Test:** L1 + L2
+
+- [ ] `PolicyState` is mutable and replicated, and the chart is **a rendering of it** — not a
+      parallel copy that has to be kept in step.
+- [ ] Every destination maps to exactly one chute, or `ContentTool validate` fails the build
+      (E13-03).
+- [ ] The chart is legible from the far wall. E15-02 owns that check; this story owns the data.
+
+#### E3-06 · Per-post replication filtering
+**Depends:** E3-01, E3-02, E2-04 · **Test:** L3
+
+The mechanism that makes voice load-bearing. It is a **network** property, never UI gating — a UI
+lie is one a client can trivially see through, and it means every client already holds every
+manifest (Arch §5.3).
+
+- [ ] The host does not send a manifest to a client that has not earned it.
+- [ ] The filter is applied at the point of **sending**, not at the point of rendering.
+- [ ] Each of Arch §5.3's four rows is expressed as data, so a fifth post is content rather than a
+      code change.
+
+#### E3-07 · L3 manifest anti-assertion
+**Depends:** E3-06, E0-09 · **Test:** L3
+
+- [ ] A client that has not scanned parcel X **provably never receives** X's manifest — the test
+      inspects the client's received state, not its UI.
+- [ ] **Proved by removal:** delete the filter, watch the test go red, restore it. Standards §8 is
+      explicit that this failure is silent, and silence is why it earns the harshest check in the
+      suite. Nothing looks broken when a client knows too much.
+- [ ] A late joiner is covered, or E12-03 reopens the hole from the other side.
+
+#### E3-08 · Mid-shift policy change
+**Depends:** E3-05 · **Test:** L1 + L3
+
+The antagonist landing a hit, expressed as a data change.
+
+- [ ] A policy change updates `PolicyState` and every client's chart within one replication
+      interval.
+- [ ] The crew is **not** told what changed beyond what the PA and the chart say. Silent staleness
+      is the point of the feature.
+- [ ] The policy applied to a parcel is the one in force **when it entered the chute** — read the
+      gap on in-flight parcels first, and do not settle it privately inside this story.
+
+#### E3-09 · **Gate 2 — the four-player job session**
+**Depends:** E3-06, E4-05, E12-01, E19-05 · **Test:** playtest (Arch §10.3)
+
+- [ ] Four players complete parcels correctly, and **cannot** do so from one position — observed,
+      not assumed.
+- [ ] The instrument answers vision Q3's actual question: does any player report time pressure from
+      **scrutiny**, or only from **volume**?
+- [ ] Whether the crew separates to four posts or clumps into a blob is recorded (vision §8).
+- [ ] A written go/no-go on the asymmetric-information design.
+- [ ] **A dilution finding triggers E3-10, not a design reopening** (epics E3, E19).
+
+#### E3-10 · Mandated post rotation — **held fix, do not build**
+**Depends:** E3-09 reporting dilution · **Test:** L1 when authorised
+
+Pre-approved and deliberately unbuilt, so that a gate failure costs one story rather than a
+redesign.
+
+- [ ] Not started unless Gate 2 finds dilution.
+- [ ] When built: management requires staff to rotate stations mid-shift, announced over the PA — a
+      policy plus a PA line, nothing more.
+- [ ] It must not disturb the voice loop: a player still holds only their **current** post's
+      information, which E3-06 already guarantees provided rotation goes through the same path.
+
+---
+
+### E4 — The Facility
+
+*A believable postal facility whose architecture already leaves room for something stranger.*
+
+#### E4-01 · Conveyors and rails
+**Depends:** E14-03, E0-06 · **Test:** L2
+
+The mechanism that makes "the belt never stops" affordable.
+
+- [ ] A parcel entering a belt becomes `Railed`: a spline, a speed and a lane, sent once (Arch §3.4).
+- [ ] Clients extrapolate with **no ongoing traffic** — asserted by measuring traffic, not by
+      reading the code.
+- [ ] **The belt does not stop and does not despawn its backlog.** Parcels accumulate at the end,
+      because accumulation is the design keystone (vision §2), not an overflow condition to handle.
+- [ ] Carries Arch §2's `ponytail:` comment on constant-speed extrapolation verbatim, with its
+      ceiling and its upgrade path.
+
+#### E4-02 · Chutes
+**Depends:** E4-01, E3-04 · **Test:** L2 + L1
+
+- [ ] A chute reports *"parcel N entered me"* to the host and **decides nothing** (Arch §1). Physics
+      proposes; the domain disposes.
+- [ ] The routing outcome is recorded silently. **No live wrong-chute indicator** (Arch §4.4).
+- [ ] Jam state is representable; E6 fills in what causes one.
+
+#### E4-03 · Pneumatic tubes
+**Depends:** E4-01, E2-02 · **Test:** L2 + L3
+
+- [ ] A parcel in transit is `(tubeId, eta)` and **may have no body at all** — its node may be freed
+      entirely (Arch §3.4).
+- [ ] Arrival rebuilds a node from the record with identity, manifest and tamper state intact
+      (E2-09 asserts this end to end).
+- [ ] **No transform replication during transit**, proved by traffic measurement rather than by
+      inspection.
+
+#### E4-04 · Doors
+**Depends:** E14-03 · **Test:** L2
+
+- [ ] Open/closed state is host-authoritative.
+- [ ] A door can be added, moved or removed by E9's mutations **without a new class** (Arch §4.1).
+- [ ] A door cannot permanently trap a player; invalid state recovers rather than disabling the node
+      forever (Standards §10).
+
+#### E4-05 · Layer 2 greybox
+**Depends:** E4-01, E4-02, E4-04 · **Test:** playtest evidence, no suite
+
+- [ ] ~30×24 m plus adjacent rooms (vision §8, §12).
+- [ ] The four posts are far enough apart that one player cannot work two — **measured in
+      walk-seconds**, not in metres, and recorded so E3-09's observation has a baseline.
+- [ ] Four players at four posts complete a parcel without a traversal complaint. The distance is
+      there to force talking, not to force jogging.
+
+#### E4-06 · Layer 1 greybox *(post-MVP)*
+**Depends:** E4-05 · **Test:** build only
+
+- [ ] Lobby, counter, PO boxes, staff door. **Believable post office first, uncanny second**
+      (vision §3.3) — this is the layer that sets that expectation, so it is authored straight.
+
+#### E4-07 · Layer 3 stub *(post-MVP)*
+**Depends:** E4-05 · **Test:** build only
+
+- [ ] An expansion surface exists, gated by wrongness rather than by shift number (vision §12).
+- [ ] **Nothing that ships depends on it.** That is the whole acceptance criterion.
+
+#### E4-08 · Signage as data
+**Depends:** E13-04 · **Test:** L1 via `ContentTool`
+
+- [ ] Signage is a data table from day one, **never baked into geometry** (Arch §7).
+- [ ] A sign referencing a destination that does not exist **fails the build**.
+- [ ] The schema carries the fields E15-03's colourblind-safe audit needs, so that audit is a check
+      rather than a migration.
+
+#### E4-09 · Navigation *(post-MVP)*
+**Depends:** E4-05 · **Test:** L2
+
+Nothing navigates until E6's live contents exist. This story is recorded so the trigger has a name,
+not so it gets built early (`AGENTS.md` rung 1).
+
+- [ ] A navmesh covers Layer 2.
+- [ ] Rebuilding after a geometry change is **one call**, because E9 mutates geometry at shift start
+      and navigation must follow it identically on all four peers.
+
+#### E4-10 · Full-belt replication cost measurement
+**Depends:** E4-01, E2-10 · **Test:** measurement · **Answers:** epics open item 3
+
+- [ ] A full belt measured against Arch §8, and **E4 is not done until the number is recorded** —
+      either a pass, or a documented overage with a named cause (epics E4 DoD).
+
+---
+
+## Alongside — the slices Gate 1 depends on
+
+*These epics run from Tier 1 onward. Only the stories the MVP line actually needs are decomposed
+here; the rest of each epic stays at the epic level.*
+
+### E12 — Session Ops
+
+#### E12-01 · Lobby
+**Depends:** E0-04 · **Test:** L2 + L3
+
+- [ ] A host creates a session; up to three clients join; the lobby shows who is connected.
+- [ ] Starting the shift transitions all four peers together.
+- [ ] Works over ENet in development and Steam in a shipping build, with no gameplay difference
+      between them.
+
+*The lobby is MVP scope because Gate 1 needs it. The rest of this epic is not (epics E12).*
+
+#### E12-02 · One-click Steam invite
+**Depends:** E0-01, E0-03, E12-01 · **Test:** manual
+
+- [ ] A Steam invite puts a friend in the game **with no address typed**.
+- [ ] No custom matchmaking, now or ever — Steam friends and invites only (vision §16).
+
+#### E12-03 · Join in progress
+**Depends:** E12-01, E3-06 · **Test:** L3
+
+- [ ] A client joining mid-shift receives current parcel records **at their post's information
+      level**. A late joiner is the easiest place to accidentally hand out every manifest, and
+      E3-07's anti-assertion must cover this path explicitly.
+- [ ] The shift is not paused, reset or otherwise disturbed by the join.
+
+#### E12-04 · Leave handling
+**Depends:** E12-01 · **Test:** L3
+
+- [ ] A client leaving mid-shift does not corrupt the shift.
+- [ ] Their held parcels **drop** — they do not vanish, and they do not stay frozen in a
+      disconnected hand.
+- [ ] **Their ledger entries survive.** The report still names them (vision §7). A leaver whose
+      blame evaporates has learned they can escape the report, which is the one lesson this game
+      must not teach.
+
+#### E12-05 · Graceful host loss
+**Depends:** E0-10, E12-01 · **Test:** L3
+
+- [ ] The host leaving ends the shift cleanly on every peer, with an honest message. **No host
+      migration** — it is explicitly not in scope (epics E12).
+- [ ] Whether a partial shift produces a report is decided **before this story starts** — see the
+      gap recorded below.
+
+#### E12-06 · Player identity for the report and the PA
+**Depends:** E12-01 · **Test:** L1 · **Answers:** epics open item 6, earlier than it expects to be
+answered
+
+- [ ] Names derive from the Steam persona (epics E5).
+- [ ] A fallback generator exists for ENet development builds, CI and the L3 suite — and it is **in
+      tone**. `Player 2` on the report is a tone regression (epics open item 6).
+- [ ] A name round-trips unchanged: ledger entry → report line → PA name token.
+
+---
+
+### E13 — Authoring Pipeline *(the early-and-badly slice)*
+
+*Vision §13: start it early and badly rather than late and well. These are the content types the
+MVP line actually consumes; the mutation, PA-line and hazard schemas arrive with E9, E7 and E6.*
+
+#### E13-01 · Parcel archetype `.tres` schema
+**Depends:** E2-01 · **Test:** L1 via `ContentTool`
+
+- [ ] A new parcel archetype ships **with no code change** — proved by adding one in the same PR.
+- [ ] Mass and size are sanity-checked; declared contents resolve.
+- [ ] An unknown id makes the thing **inert and logged, not fatal** (Standards §9). Content data
+      outlives the table that described it.
+
+#### E13-02 · Manifest and address grammar
+**Depends:** E13-01 · **Test:** L1
+
+- [ ] Every authored address parses to a routable destination, checked at load.
+- [ ] The grammar is **one schema, not two shapes with a fallback bridging them** (Standards §9).
+      That mistake is permanent: every reader afterwards has to handle both, forever.
+
+#### E13-03 · Routing policy schema
+**Depends:** E13-02 · **Test:** L1
+
+- [ ] Every destination maps to **exactly one** chute; a policy that breaks this fails the build
+      rather than producing an unroutable shift.
+- [ ] A policy change is a data edit, because E3-08 needs the PA to make one mid-shift.
+
+#### E13-04 · Signage table
+**Depends:** E13-02 · **Test:** L1
+
+- [ ] Referenced destinations exist, or the build fails.
+- [ ] Carries the colour and shape fields E15-03 needs.
+
+#### E13-05 · `ContentTool validate`
+**Depends:** E13-01 · **Test:** L1
+
+- [ ] A deliberately broken content file fails validation with a message naming **the file and the
+      invariant**. A validator whose output is `Invalid` teaches nobody anything at 11pm.
+- [ ] Validation runs in seconds. A slow validator is a skipped validator.
+- [ ] **Every new content type ships its validation rule in the same PR** (Standards §9). That rule
+      is the only thing stopping this epic from rotting quietly.
+
+#### E13-06 · `ContentTool validate` in CI
+**Depends:** E13-05, E14-07 · **Test:** build only
+
+- [ ] A broken content file **fails the build** — proved by pushing one and watching CI go red
+      (Arch §7). This is the only mechanism that keeps a pipeline honest under deadline.
+
+#### E13-07 · Authoring guide, first pass
+**Depends:** E13-05 · **Test:** none
+
+- [ ] Written for whoever is authoring content at 11pm, because that is the actual audience.
+- [ ] It is allowed to be bad. It is **not** allowed to be missing — that is the entire thesis of
+      this epic (vision §13).
+
+---
+
+### E15 — UI *(the minimum Gate 0, 1 and 2 need)*
+
+*HUD, full settings, subtitles, font scaling and remapping are out of this pass.*
+
+#### E15-01 · Scanner screen
+**Depends:** E3-02 · **Test:** L2
+
+- [ ] The scan result is read from a **diegetic surface**; a clipboard or a screen beats a HUD panel
+      where the fiction allows it (epics E15).
+- [ ] It displays only what this client has actually received. It cannot display a manifest the
+      network never sent — which is E3-06 doing its job, visible from the outside.
+
+#### E15-02 · Routing chart rendering and the legibility check
+**Depends:** E3-05 · **Test:** L2 + in-engine check
+
+- [ ] The chart is **legible at 1080p from the far wall**, checked at the real post distance in the
+      real greybox — not on a monitor two feet away (epics E15 DoD).
+- [ ] It re-renders on a `PolicyState` change without a reload.
+
+#### E15-03 · Colourblind-safe chute and signage coding
+**Depends:** E4-08, E13-04 · **Test:** audit
+
+- [ ] Chute identity and signage are distinguishable **without colour** — shape, number or pattern
+      carries the information, and colour is redundant reinforcement.
+- [ ] Audited under deuteranopia, protanopia and tritanopia simulation.
+- [ ] This is a **correctness requirement, not a nicety** (Standards §10): routing is the core verb,
+      and the game is unplayable without it. Not lazy-able (`AGENTS.md`).
+
+#### E15-04 · Minimum settings for playtests
+**Depends:** E1-02 · **Test:** L2
+
+Not in the epics document's story list, and needed **before Gate 0** rather than after it: a
+participant who cannot set their sensitivity is testing your mouse settings, not your grab feel —
+and that contaminates the one gate whose entire evidence is a single unprompted word.
+
+- [ ] Look sensitivity, invert-Y and FOV, persisted between sessions.
+- [ ] Lives in `SettingsService`, one of the four permitted autoloads (Arch §6.2). **No fifth
+      autoload** — that is an architecture change, not a PR.
+
+---
+
+### E17 — Asset pipeline *(the placeholder contract)*
+
+#### E17-01 · The asset specification
+**Depends:** E14-01 · **Test:** none
+
+- [ ] Every placeholder the game needs is **described in a specification**, and the specification is
+      the source of truth — not the asset folder (epics E17 DoD).
+
+#### E17-02 · Placeholder generator in `ContentTool`
+**Depends:** E17-01, E13-05 · **Test:** L1
+
+- [ ] Placeholders are **generated from the specification**, never hand-made and committed.
+- [ ] Output is deterministic for a given spec, so regeneration produces no spurious churn.
+
+#### E17-03 · `Directory.Build.targets` wiring
+**Depends:** E17-02 · **Test:** build only
+
+- [ ] Placeholders regenerate **before the game builds**, so a fresh clone just works.
+- [ ] **Generated placeholders are not committed** (epics E17, Standards §9). The house project
+      learned this twice: committed placeholders went through LFS, so a clone that skipped
+      `git lfs pull` booted invisible; and the bytes were toolchain-coupled, so a .NET bump rewrote
+      every PNG without changing a pixel.
+- [ ] A fresh clone builds and runs **with no LFS fetch at all**.
+
+#### E17-04 · Silhouette legibility rules
+**Depends:** E17-01 · **Test:** audit
+
+- [ ] A parcel's size, weight class and fragility are legible **at a glance**, from the silhouette
+      alone (vision §3.4).
+- [ ] Checked **at video-compression quality**, not at 4K. "Legible at 4K" is not the test — the
+      clip is the product (Standards §10).
+
+---
+
+### E18 — Build and export *(the early verification only)*
+
+*Steamworks setup, depots, CI export and crash reporting are out of this pass.*
+
+#### E18-01 · Export presets for the three desktop targets
+**Depends:** E14-03 · **Test:** manual
+
+- [ ] **Export templates for 4.7.2-stable-mono are installed first.** The machine currently has
+      4.6 templates and no 4.7.2 set, so this story fails on its first attempt until they are
+      downloaded (epics open item 10). Templates are versioned with the editor and must match it
+      exactly.
+- [ ] Windows, Linux and macOS presets exist and produce a launching build.
+- [ ] `export_presets.cfg` is committed; secrets live in `export_credentials.cfg`, which is not
+      (epics E18).
+
+#### E18-02 · Domain-in-export verification
+**Depends:** E18-01, E2-01 · **Test:** manual, once, and again whenever export config changes
+
+- [ ] An exported build runs a Domain code path and logs a value proving the assembly shipped.
+- [ ] **`net10.0` survives the export.** Every other leg of the TFM override was verified up
+      front (Arch §1.4); export is the one that could not be, because it needs templates. If it
+      fails here, that bullet is where the finding goes — and the fallback is `net8.0`, which
+      costs compile surface and nothing else.
+- [ ] **Done on the first Phase-1 story, not the week of launch** (Arch §1.4, epics E18). The
+      failure mode — `solution_directory` unset, the exporter refusing every C# source — is silent
+      right up until it is expensive.
+
+---
+
+### E19 — Playtest operations *(Gates 0 to 2)*
+
+*Gate 3's clip-capture instrument is out of this pass; it arrives with E8.*
+
+#### E19-01 · The facilitation protocol
+**Depends:** — · **Test:** none
+
+- [ ] How a session is run, what the facilitator says, and **what they must not say** — leading a
+      participant toward the word "awkward" invalidates Gate 0 entirely.
+- [ ] **Participants have not seen the game, and do not carry across gates** (epics E19).
+
+#### E19-02 · Gate 0 instrument
+**Depends:** E19-01 · **Test:** none
+
+- [ ] Records **verbatim words**, not scores. The finding is which word arrives unprompted:
+      *awkward*, or *broken*.
+- [ ] Names in advance what a fail looks like, so the result is not renegotiated after the session.
+
+#### E19-03 · Gate 1 instrument and recruitment
+**Depends:** E19-01 · **Test:** none
+
+- [ ] The instrument asks vision §15's question **verbatim**: *does manipulating a shared physical
+      object still feel believable when three other people are doing it too, over real internet?*
+- [ ] Four participants on **real, separate connections** — four machines on one LAN answers an
+      easier question and would make the gate worthless.
+- [ ] `LatencyPeer` (E0-07) is available as a supplement, never as a substitute.
+
+#### E19-04 · The Gate 1 written decision
+**Depends:** E19-03, and everything Gate 1 needs · **Test:** none
+
+- [ ] A written go/no-go **citing observations, not opinions**.
+- [ ] It states plainly that **on a fail, feature work stops** (vision §15, epics E19). Nothing above
+      that line matters, and the decision document is where that gets said out loud, in advance.
+
+#### E19-05 · Gate 2 instrument and decision
+**Depends:** E19-01 · **Test:** none
+
+- [ ] Named observation targets: **scrutiny or volume**, and separately, **blob or crew**.
+- [ ] The pre-approved response to a dilution finding is E3-10, recorded **before** the session, so
+      a bad result cannot become a redesign argument afterwards.
+- [ ] Shift length is **refined here, not decided here**: 8–12 min × 3–6 shifts is already the build
+      target, and this moves it inside that envelope on evidence (epics E19).
+
+#### E19-06 · The findings register
+**Depends:** E19-01 · **Test:** none
+
+- [ ] One place where every gate decision and every playtest observation lives, so a decision made
+      in month two is still findable in month nine.
+- [ ] Gate 0's and Gate 1's decisions are filed here, not in a chat.
+
+---
+
+## The first ten stories, in order
+
+Sequencing comes from the dependency graph, and the graph's first walk is unambiguous. The only
+judgement call in it is that **two spikes come before the work they de-risk** — which is the whole
+point of a spike.
+
+| # | Story | Why here |
+| ---: | :-- | :-- |
+| 1 | **E14-01** Solution scaffold | Nothing builds without it |
+| 2 | **E14-02** editorconfig + build props | Set the rules before there is code to grandfather |
+| 3 | **E14-03** Godot project, Jolt confirmed | Every Arch §8 number assumes Jolt |
+| 4 | **E14-04** xUnit + first real test | The L1 baseline is measured while the suite is empty |
+| 5 | **E0-01** Steam C# spike | **Week one, not negotiable.** It can reshape E12 |
+| 6 | **E14-06** Architecture test | Written before there is a violation to grandfather |
+| 7 | **E14-07** CI | A pipeline added later is a pipeline that starts red |
+| 8 | **E0-02** `IGameTransport` + ENet | Unblocks everything with a peer in it |
+| 9 | **E1-01** Jolt joint spike | Answers whether E1-04's grab design survives |
+| 10 | **E0-08** L3 harness feasibility | Decides the shape of every network test that follows |
+
+After that the graph forks cleanly: **E0-04 → E0-09 → the L3 chain** on one side, **E1-02 → E1-05 →
+Gate 0** on the other, and **E13-01/E17-01** running alongside from the moment `ParcelRecord` exists.
+
+---
+
+## Gaps this decomposition surfaced
+
+The epics document asks that a question a story cannot answer from its epic's **Decisions already
+made** be recorded and answered **once, at the epic level**. Decomposing the MVP line surfaced
+seven. Four are genuinely open; three are duplications or inconsistencies that need a ruling rather
+than a decision.
+
+| # | Gap | Blocks | Suggested owner |
+| ---: | :-- | :-- | :-- |
+| 1 | **Who owns the player character's transform?** Arch §3.1 says host authority with no prediction of gameplay state; Arch §6.1 says input never waits for the network. For your own body those reconcile only if the character node's authority is the **owning peer** — which is not prediction, and a position is not a fact about the shift. That reading is assumed in E1-02 and needs confirming rather than inferring, because every other network story inherits it | E1-02, and everything downstream | Tech |
+| 2 | **Which policy judges a parcel already in flight?** E3-08 changes `PolicyState` mid-shift. A parcel stamped under the old policy and entering a chute after the change is judged by — the policy at stamp time, or at chute entry? Chute entry is assumed (it is crueller, more on-theme, and the only one that needs no cached answer, which Standards §12 forbids anyway), but it is a design call, not a technical one | E3-04, E3-08 | Owner |
+| 3 | **Does a host-lost shift produce a report?** E12-05 ends the shift cleanly on all peers. Vision §7 makes the report the highest-value feature and §3.5 makes blame the comedy engine — a rage-quitting host who deletes everyone's report is a real outcome to have an opinion about | E12-05, E8 later | Owner |
+| 4 | **What is a post, physically?** A volume you stand in, or a station you interact with? E3-01 and E3-06 both hang off the answer, and so does whether "you cannot work two at once" is enforced by geometry or by state | E3-01, E3-06, E4-05 | Owner + Tech |
+| 5 | **Host-loss teardown is listed in two epics.** It is a story in E0 *and* in E12. Split here as E0-10 (session ends cleanly, asserted at L3) and E12-05 (the player-facing message and return to lobby). Confirm or merge | E0-10, E12-05 | Tech |
+| 6 | **Scanner and chart appear in both E3 and E15.** Split here as E3 owning the mechanism and E15 owning the surface. E15's header also says Tier 2 while the dependency diagram says it runs from Tier 1 — the diagram is right, since E3 cannot be played without a readable chart | E3-02, E3-05, E15-01, E15-02 | Tech |
+| 7 | **Gate 2 needs Gate 1's kit.** Gate 2 lives in E3 (Tier 1), but it needs four players and a lobby, which is Gate 1's line. Sequence is presumably Gate 1 → Gate 2 in the same window; worth stating, because "Gate 2 lives in E3" reads as though it comes first | E3-09, E19-05 | Owner |
+
+**Two existing open items bind earlier than the epics document expects:**
+
+- **Open item 6 — the employee-name fallback** is filed as *"with E5."* E12-06 needs it now, because
+  the L3 suite and every ENet development build need a name before E5 exists.
+- **Open item 3 — replication measurement** is filed as *"before E4 is done."* E2-10 and E4-10 are
+  the same measurement taken from two sides; run it once, record it once, cite it twice.
+
+---
+
+## Not in this pass
+
+Left at the epic level deliberately, with the reason:
+
+| Epic | Why it waits |
+| :-- | :-- |
+| **E5 — The Ratchet**, **E6 — Chaos** | Tier 2. Gate 1 sits at the entrance to this tier and can reshape both |
+| **E7 — Presence** | Unblocked by the voice decision, but its design assumes E3's four posts survive Gate 2 |
+| **E8 — The Blame Report** | Depends on E5 and E6; its plumbing is already being built in E2 and E6 by design |
+| **E9 — Wrongness**, **E11 — Between Shifts** | Tier 4 |
+| **E10 — Dead Letters** | Deferred, not cut. The epics document decomposes no stories **deliberately**, and this document does not either |
+| **E15 (rest)**, **E16**, **E17 (rest)**, **E18 (rest)**, **E20** | Production epics whose Gate 1 slice is above; the remainder follows the tier that needs it |
+| **E13 (mutation, PA line and hazard schemas)** | Each arrives with the epic that authors that content type — E9, E7, E6 |
+
+Decompose the next tier **after Gate 1 reports**, not before. If Gate 1 fails, most of it would have
+been written twice.
+
+---
+
+*Product intent, pillars and scope: see [the vision](dead-letter-office-vision.md). Patterns and
+technical decisions: see [the architecture](dead-letter-office-architecture.md). Epics, gates and
+sequencing: see [the epics](dead-letter-office-epics.md).*

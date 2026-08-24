@@ -1,6 +1,6 @@
 # Dead Letter Office — Technical Architecture
 
-**Status:** Draft v0.2 · Godot 4.6.x · .NET / C# · Companion to the Vision document
+**Status:** Draft v0.2 · Godot 4.7.2 · .NET / C# · Companion to the Vision document
 **Audience:** developers picking up epics. This document is the answer to "how should I build this?" — if it doesn't answer your question, that's a defect in this document. Raise it rather than guessing.
 
 > **Derived from** [dead-letter-office-vision.md](dead-letter-office-vision.md). Where this
@@ -53,7 +53,7 @@ keyboard. The domain consumes events from it the same way it consumes a button p
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Dlo.Game  (Godot 4.6, runs on every peer)                   │
+│  Dlo.Game  (Godot 4.7, runs on every peer)                   │
 │  Character controller · grab joints · parcel bodies ·         │
 │  conveyors · chutes · doors · VFX · PA audio · HUD            │
 └───────────┬──────────────────────────────────┬───────────────┘
@@ -112,7 +112,7 @@ Mirrors the house layout so the tooling knowledge transfers.
 
 ```
 /dlo.sln
-  /src/Dlo.Domain/            class library, netstandard2.1, no Godot reference
+  /src/Dlo.Domain/            class library, net10.0, no Godot reference
   /src/Dlo.Game/              the Godot project (project.godot lives here)
   /tests/Dlo.Domain.Tests/    xUnit — fast, no engine (L1)
   /tests/Dlo.Game.Tests/      GdUnit4 — engine required (L2)
@@ -122,7 +122,10 @@ Mirrors the house layout so the tooling knowledge transfers.
 
 ### 1.4 Known gotchas — read before you fight the tooling
 
-Inherited from the house project. All of these cost someone an afternoon already.
+The first four are inherited from the house project, and each cost someone an afternoon already.
+**The last three came from probing the pinned 4.7.2 install directly** (2026-08-24), before they
+could cost anyone one — so they are findings rather than scar tissue, and they are stated as
+what the binary does rather than as what the release notes say.
 
 - **Godot regenerates `Dlo.Game.csproj`.** Project references to `Dlo.Domain` survive it;
   custom MSBuild properties do not. Keep custom config in `Directory.Build.props` at the
@@ -135,9 +138,41 @@ Inherited from the house project. All of these cost someone an afternoon already
   on it.
 - **The Domain assembly must be copied to the export.** It is, via project reference — verify
   this in the first export build (E18), not the week of launch.
-- **Jolt is the default 3D physics engine for new 4.6 projects.** Confirm `project.godot`
-  actually says so rather than assuming; a project migrated from an older template will
-  silently still be on GodotPhysics, and every tuning number in §8 assumes Jolt.
+- **`project.godot` must set `physics/3d/physics_engine="Jolt Physics"` explicitly.** A fresh
+  4.7.2 project leaves that setting at the string `DEFAULT` — probed in the editor, not assumed —
+  and `DEFAULT` means *whatever this build registers first*, which is a resolution order rather
+  than a promise. Naming Jolt outright is the only way the file states which engine you actually
+  got, and **every tuning number in §8 assumes Jolt.** A project migrated from an older template
+  is the second way this goes wrong silently.
+- **The editor is pinned at 4.7.2-stable-mono**, and export templates are versioned with it. On
+  the development machine the editor lives at
+  `D:\work\Godot\Godot_v4.7.2-stable_mono_win64\` — that path is machine-local, and the README
+  (E14) is where each machine records its own. **Templates matching the exact editor version must
+  be installed before E18 can export anything**; a missing or mismatched set fails at export time,
+  not at build time, which is the expensive end to discover it.
+- **Godot generates `net8.0`. We target `net10.0` and override it — that is a decision, not an
+  oversight, and the next person to "fix" it should read this bullet first.** Godot 4.7.2's
+  project generator hardcodes `net8.0` (the only TFM string in `GodotTools.ProjectEditor.dll`)
+  and GodotSharp ships against it. That is Godot's floor, not a ceiling. Measured on the
+  development machine, 2026-08-24, all four separately:
+  - `net10.0` **builds** against GodotSharp — a net8.0 library referenced from a net10.0 project
+    is ordinary, not a workaround.
+  - Godot's own `--build-solutions` **builds it**, so the in-editor build path is not bypassed.
+  - The editor **does not rewrite `<TargetFramework>`** — opening the project headless left the
+    csproj byte-identical. The regeneration warning above applies to custom *properties*, not to
+    the TFM.
+  - It **runs**, reporting `.NET 10.0.11`.
+
+  **And the runtime was `.NET 10.0.11` at `net8.0` too**, because Godot's host reads
+  `GodotPlugins.runtimeconfig.json` — 8.0.0 with `rollForward: LatestMajor` — and takes the
+  newest major installed. So `net8.0` would mean **compiling against an older BCL than the one
+  actually executing**, and adopting a framework that leaves support in November 2026, before
+  this project ships. There is no runtime cost either way; the only thing the TFM buys or denies
+  is compile surface.
+
+  **The one piece still unverified is export** (E18): it needs 4.7.2 export templates, which are
+  not installed yet. E18-01 verifies `net10.0` survives a real export, and that is the story to
+  revisit this bullet from if it does not.
 
 ---
 
@@ -565,7 +600,7 @@ Vision §3.1's distinction is the highest-risk feel requirement in the build. Tw
   slowed down or the camera got sluggish. Input damping to simulate weight is the specific
   mistake that makes the game read as broken. It is banned.
 
-Godot 4.6's new IK framework (`TwoBoneIK3D`, `FABRIK3D`, `CCDIK3D`) is the cheap path to
+Godot 4.7's new IK framework (`TwoBoneIK3D`, `FABRIK3D`, `CCDIK3D`) is the cheap path to
 hands that visibly reach the box they are holding, including the two-person carry. Use it
 before writing procedural arm code (AGENTS.md rung 3).
 
@@ -771,8 +806,8 @@ runs on merge to main, not per-push, because it is minutes rather than seconds.
 
 ## 11. Open technical items
 
-Ordered by when the answer is needed, not by size. **All four remaining items are empirical
-— they are answered by measurement or a spike, not by a decision.**
+Ordered by when the answer is needed, not by size. **All five remaining items are empirical —
+they are answered by measurement or a spike, not by a decision.**
 
 | # | Item | Blocks | Needed by |
 | ---: | :-- | :-- | :-- |
@@ -790,6 +825,8 @@ Ordered by when the answer is needed, not by size. **All four remaining items ar
 | Does proximity voice need Steam at all? | **No.** Native capture + pure-C# Opus over `IGameTransport` |
 | `CulpabilityWindow` per event kind | **No window.** Culpability never expires (§4.6) |
 | Shift length | **8–12 min × 3–6 shifts**, provisional, curve is a data file, Gate 2 refines |
+| Target framework, now that the .NET 10 SDK is installed | **`net10.0` everywhere, overriding the `net8.0` Godot generates.** Measured, not assumed: it builds, Godot's own build path builds it, the editor leaves the setting alone, and it runs. The runtime is `.NET 10` at either TFM, so `net8.0` would only mean compiling against an older BCL than the one executing — and one that leaves support in November 2026 (§1.4). Export is the one leg still unverified, and E18-01 verifies it |
+| Does `Dlo.Domain` stay on `netstandard2.1`? | **No — `net10.0`, same as everything else.** It had no consumer outside this repo, and it was what forced the `IsExternalInit` declaration for `readonly record struct`. That workaround is deleted rather than documented |
 
 ---
 

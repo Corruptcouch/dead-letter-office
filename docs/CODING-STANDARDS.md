@@ -1,6 +1,6 @@
 # Dead Letter Office — Coding Standards
 
-**Status:** normative · Godot 4.6.x · .NET 10 SDK · C#
+**Status:** normative · Godot 4.7.2 · .NET 10 SDK · C#
 **Audience:** anyone, human or agent, adding code to this repo.
 
 Where this document and habit disagree, this wins. Where this document and the
@@ -75,7 +75,19 @@ problem this architecture already solved a different way.
 
 ## 1. Toolchain and language baseline
 
-Godot 4.6.x, .NET 10 SDK, C#. `Dlo.Domain` targets `netstandard2.1` (epics E14).
+**Godot 4.7.2-stable-mono**, .NET 10 SDK, C#, and **`net10.0` for every project** (epics E14).
+
+**Godot generates `net8.0` and we override it, deliberately.** Godot 4.7.2's project template
+hardcodes `net8.0` and GodotSharp ships against it, but that is Godot's floor, not a ceiling —
+`net10.0` was measured working end to end: it builds, Godot's own `--build-solutions` builds it,
+the editor does not rewrite the setting, and it runs. The runtime is `.NET 10` either way, since
+Godot's host rolls forward to the newest major installed (arch §1.4). Targeting `net8.0` would
+mean compiling against an older BCL than the one actually executing, and adopting a framework
+that leaves support in November 2026 — before this project ships.
+
+**The editor version is pinned.** On the development machine it lives at
+`D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`; **that path is machine-local and belongs in the
+README, not in a rule** — each machine records its own (epics E14).
 
 - **Nullable enabled everywhere. Warnings-as-errors in `Dlo.Domain` only** — the Game layer
   compiles Godot's noisy generated glue, and failing the build on it means nobody can build
@@ -91,16 +103,14 @@ Godot 4.6.x, .NET 10 SDK, C#. `Dlo.Domain` targets `netstandard2.1` (epics E14).
   layer, so the enforced gate there is the suite — do not let the IDE warning list accumulate
   noise, because that is where a real warning goes to hide.
 
-**One toolchain gotcha to confirm on the first record rather than later:** records and `init`
-accessors need `System.Runtime.CompilerServices.IsExternalInit`, which the SDK does not supply
-for `netstandard2.1`. Domain is full of `readonly record struct` (arch §4.6, §5.1), so if the
-first one does not compile, declare that attribute once, `internal`, in Domain — do not
-downgrade the record to a class.
+*(The `IsExternalInit` workaround that used to live here is gone with `netstandard2.1`. `net10.0`
+supplies the attribute, so `readonly record struct` just compiles. If you find that hack in a
+tutorial, you do not need it.)*
 
 ### 1.1 The wrong idiom is the one most likely to be suggested
 
 Godot 3 predates the current shape of the C# API, and search results, tutorials and language
-models have seen far more Godot 3 than 4.6. These are the ones to reject on sight:
+models have seen far more Godot 3 than 4.7. These are the ones to reject on sight:
 
 | Do not write | Write |
 | :-- | :-- |
@@ -406,12 +416,13 @@ defect — raise it rather than reinventing the command.
 - **Pool parcels; do not `QueueFree` them** (arch §6.4). They are the highest-churn object in the
   game and the belt never stops. A recycled node picks up a new record and carries nothing over —
   which holds only if §5's no-state-on-the-node rule holds.
-- **Reach for the engine before writing the code** (`AGENTS.md` rung 3). Godot 4.6's IK framework
+- **Reach for the engine before writing the code** (`AGENTS.md` rung 3). Godot 4.7's IK framework
   (`TwoBoneIK3D`, `FABRIK3D`, `CCDIK3D`) before procedural arm code; `AudioStreamPlayer3D`
   falloff before hand-rolled proximity attenuation.
-- **Confirm Jolt in `project.godot` rather than assuming it** (arch §1.4). Every tuning number in
-  arch §8 assumes Jolt, and a project migrated from an older template is silently still on
-  GodotPhysics.
+- **Set `physics/3d/physics_engine="Jolt Physics"` explicitly in `project.godot`** (arch §1.4).
+  A fresh 4.7.2 project leaves it at `DEFAULT`, which names a resolution order rather than an
+  engine. Every tuning number in arch §8 assumes Jolt, and a project migrated from an older
+  template is silently still on GodotPhysics.
 - **Validate and recover from invalid node state; do not permanently disable the node.** If the
   scene becomes valid again, it should resume normal behaviour. (house)
 - **Accessibility is not lazy-able** (`AGENTS.md`, epics E15). **Colourblind-safe signage and

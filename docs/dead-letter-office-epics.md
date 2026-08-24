@@ -81,7 +81,7 @@ Gate 0 does not authorise Gate 1's scope.
 
 **In:** solution and project structure per Architecture §1.3. `.editorconfig`,
 `Directory.Build.props`, `global.json`. xUnit and GdUnit4 harnesses. GitHub Actions CI. The
-architecture test (Arch §10.5). `.gitignore` and `.gitattributes` for Godot 4.6 with Git LFS
+architecture test (Arch §10.5). `.gitignore` and `.gitattributes` for Godot 4.7 with Git LFS
 for binary assets. README with setup steps. **The `.gitignore` is already rewritten for this
 project** — names, paths and stale epic citations corrected ahead of the epic, so what remains
 here is `.gitattributes` and the LFS configuration.
@@ -89,12 +89,26 @@ here is `.gitattributes` and the LFS configuration.
 **Out:** any gameplay. Any Steam dependency.
 
 **Decisions already made:**
-- Godot 4.6.x, .NET 10 SDK, C#. `Dlo.Domain` targets `netstandard2.1`.
+- **Godot 4.7.2-stable-mono**, .NET 10 SDK, C#, **`net10.0` for every project including
+  `Dlo.Domain`.** The editor version is pinned; on the development machine it lives at
+  `D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`, and that path is machine-local — the README
+  is where each machine records its own.
+- **Godot generates `net8.0` and E14 overrides it, deliberately.** Verified end to end (Arch
+  §1.4): `net10.0` builds against GodotSharp, Godot's own `--build-solutions` builds it, the
+  editor does not rewrite the setting, and it runs. The runtime is `.NET 10` at either TFM
+  because Godot's host rolls forward, so `net8.0` would only mean compiling against an older BCL
+  than the one executing — and one that leaves support in November 2026. **Export is the one leg
+  not yet verified**, and E18 owns it.
+- **`Dlo.Domain` is `net10.0`, not `netstandard2.1`.** It has no consumer outside this repo, and
+  `netstandard2.1` was what forced a hand-declared `IsExternalInit` for `readonly record struct`.
+  Deleting a workaround beats documenting one.
 - Multi-project solution at the repo root; `project/solution_directory="../.."` in
   `project.godot` (Arch §1.4).
 - Nullable enabled everywhere; warnings-as-errors in Domain only.
 - Git LFS for `.png`, `.wav`, `.ogg`, `.glb`. **Not** for `.tres` — those must stay diffable.
-- Jolt physics, confirmed explicitly in `project.godot` rather than assumed.
+- Jolt physics, **set explicitly** in `project.godot` as `physics/3d/physics_engine="Jolt
+  Physics"`. A fresh 4.7.2 project leaves it at `DEFAULT`, which is a resolution order and not
+  an engine — confirmed by probing the editor (Arch §1.4).
 
 **DoD:** fresh clone builds and runs both suites via documented commands. CI green on an
 empty commit. The architecture test fails if someone adds a Godot reference to Domain.
@@ -147,7 +161,7 @@ synchronizer classes · Steam transport spike **(do this first)** · LatencyPeer
 
 **In:** first-person character controller — move, look, jump, crouch. Hands. Grab, carry,
 throw, drop. Stumble and trip. Two-player cooperative carry. The grab protocol per
-Arch §3.3, including the optimistic local attach. IK-driven hands via Godot 4.6's
+Arch §3.3, including the optimistic local attach. IK-driven hands via Godot 4.7's
 `TwoBoneIK3D` / `FABRIK3D`.
 
 **Out:** what is being carried having any data on it — that is E2. Damage, hazards — E6.
@@ -732,6 +746,10 @@ build upload. `export_presets.cfg` committed with credentials split into
 **Decisions already made:**
 - **Verify export targets on the first Phase-1 story, not the week of launch.** Confirming
   the Domain assembly reaches the export is part of this (Arch §1.4).
+- **Export templates are versioned with the editor and must match it exactly.** The pin is
+  4.7.2-stable-mono; the development machine currently has **4.6 templates installed and no
+  4.7.2 set**, so the first export fails until they are downloaded. This fails at export time
+  rather than at build time, which is why it is recorded here rather than discovered.
 - `export_presets.cfg` is committed; secrets live in `export_credentials.cfg`, which is not.
 - **Price: $9.99, launching in Early Access** (resolves vision Q5). Matches Lethal Company and
   R.E.P.O. exactly and keeps a four-pack at ~$40 — which is the number that matters, since the
@@ -895,7 +913,8 @@ the only defence against its own reasonableness.
 
 **All five of the vision's §17 questions and all three of this document's are closed.** What
 remains is empirical — answered by a spike, a measurement or a gate — plus two small gaps the
-decision pass itself surfaced (rows 6 and 7).
+decision pass itself surfaced (rows 6 and 7), and two toolchain items that arrived with the
+**Godot 4.7.2 pin** (rows 9 and 10).
 
 | # | Item | Blocks | Owner | Needed by |
 | ---: | :-- | :-- | :-- | :-- |
@@ -907,6 +926,7 @@ decision pass itself surfaced (rows 6 and 7).
 | 6 | **Employee name source when Steam is unavailable.** Names derive from the Steam persona (E5), but ENet dev builds, CI and the L3 suite have no persona. Needs a fallback generator — and since the report and the PA both print these names, "Player 2" is a tone regression | E5, E7's PA lines, E8's report | Tech + Owner | With E5 |
 | 7 | **Does the Former Personnel wall need a cap?** Records are append-only and never expire, so the file grows without bound and the wall eventually cannot be read. Probably a roll-off or a "notable employees" filter | E11's wall | Tech + Owner | With E11 |
 | 8 | The four gate decisions themselves | Everything downstream of each gate | Owner + E19 | Per gate |
+| 9 | **Install 4.7.2 export templates.** The machine has 4.6 templates only; the first export fails until this is done. Not a decision — a task, recorded so it is not discovered at export time | E18 | Tech | Before E18-01 |
 
 ### Resolved 2026-08-24
 
@@ -928,4 +948,7 @@ and named — a gate failure should trigger it, not a redesign.
 ---
 
 *Product intent, pillars and scope: see [the vision](dead-letter-office-vision.md). Patterns
-and technical decisions: see [the architecture](dead-letter-office-architecture.md).*
+and technical decisions: see [the architecture](dead-letter-office-architecture.md). Acceptance
+criteria, test levels and story-level dependencies: see
+[the story breakdown](dead-letter-office-stories.md) — decomposed through Gate 1, and holding
+seven gaps that want an epic-level answer.*
