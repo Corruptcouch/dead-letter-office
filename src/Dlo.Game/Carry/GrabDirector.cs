@@ -22,8 +22,8 @@ namespace Dlo.Game.Carry;
 // ponytail: loads are addressed over the wire by scene path.
 // Ceiling: a path is not an identity - it breaks the moment a load is reparented or pooled, and it
 // costs more bytes than the uint it will become. Pooling is E2-06 and would break this.
-// Upgrade: E2-01's ParcelId, host-assigned, is the intended key; E2-04 already fixes the spawn
-// payload shape. This is a Dictionary key change plus the RPC signatures.
+// Upgrade: ParcelId exists as of E2-01 and is the intended key; E2-04 is where a node is given
+// one, at spawn. This is a Dictionary key change plus the RPC signatures.
 public partial class GrabDirector : Node
 {
     /// <summary>The node name this is registered under, on every peer.</summary>

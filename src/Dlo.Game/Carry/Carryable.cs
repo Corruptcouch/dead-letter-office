@@ -7,15 +7,15 @@ namespace Dlo.Game.Carry;
 /// </summary>
 /// <remarks>
 /// <b>A placeholder for E2's parcel, and deliberately not called one.</b> E1-08 needs an object
-/// the domain marks as over one-person capacity, and E2-01 owns <c>ParcelRecord</c> — so capacity
-/// lives here until it does. Naming this <c>Parcel</c> now would mean answering E2-01's design
-/// questions inside an E1 story.
+/// the domain marks as over one-person capacity. E2-01 has since defined <c>ParcelRecord</c>,
+/// which owns both facts below; they stay here until E2-04 gives a node the id to look one up by.
 /// </remarks>
 // ponytail: capacity and the policy lock are [Export] fields on the body.
-// Ceiling: they are authored per-node rather than being domain facts, so nothing can query "every
-// two-person load in the shift" and the lock has no source - E3-05's PolicyState does not exist.
-// Upgrade: E2-01 moves both onto ParcelRecord and this becomes a view of it, which is a rename
-// plus a lookup. E3-05 gives Locked a reason to change mid-shift.
+// Ceiling: E2-01 put both on ParcelRecord, so they are now authored in two places and the grab
+// reads the node's copy - nothing can query "every two-person load in the shift", and the lock
+// still has no source, because E3-05's PolicyState does not exist.
+// Upgrade: E2-04 gives the node its ParcelId at spawn and these become a registry lookup; E2-02
+// is the test that the record outlives the node. E3-05 gives Locked a reason to change mid-shift.
 public partial class Carryable : RigidBody3D
 {
     /// <summary>

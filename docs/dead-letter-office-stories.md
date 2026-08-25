@@ -30,19 +30,23 @@ marked as such instead of being rounded up.
 | **E14** Foundation | **8 done**, 1 partial | Complete bar E14-07's deliberate-failure run |
 | **E0** Netcode spine | **8 done**, 2 blocked | Spine is in and L3-proven. Steam is the only hole |
 | **E1** Embodiment | **9 done**, 1 blocked | Feature work complete. **Only Gate 0 itself is left** |
-| **E2 · E3 · E4** Tier 1 | 0 of 30 | Not started. E2-01 is unblocked today |
+| **E2 · E3 · E4** Tier 1 | **1 partial** of 30 | E2-01's Domain types are in. E2-02 and E2-04 owe the node-is-a-view wiring |
 | **Alongside** E12·13·15·17·18·19 | 0 of 29 | Not started. **E15-04 and E19-01/02 now block Gate 0** |
 
-**25 of 88 decomposed stories are done.** Suite: **L1 11 · L2 77 · L3 41**, all green, `dotnet
-format` clean.
+**25 of 88 decomposed stories are done, and one more is part-way.** Suite: **L1 16 · L2 78 ·
+L3 41**, all green, `dotnet format` clean. (L2 was recorded as 77 here and measures 78; the
+suite was never short, the tally was.)
 
-The three that fall short, all named rather than rounded up:
+The four that fall short, all named rather than rounded up:
 
 - **E1-10 — Gate 0.** Every E1 story under it is done, but the gate is a playtest: it needs a
   person who has not seen the game, plus **E15-04** and **E19-01 → E19-02**. It is now the single
   thing standing between this project and its first real verdict.
 - **E14-07** — CI runs everything it should and is green, but nobody has watched it go **red**.
   A pipeline never seen to fail is not known to work as a gate.
+- **E2-01** — the three Domain types are in and L1-proven, but `Carryable` still authors capacity
+  and the policy lock as `[Export]` fields, so those two facts now live in two places. **E2-04**
+  closes it by giving a node its `ParcelId` at spawn, and nothing else waits on it.
 - **E0-01 / E0-03** — the Steam path. Blocked on Steam accounts on separate machines, not on any
   decision. The seam around it is finished, so nothing else waits on it.
 
@@ -612,16 +616,25 @@ Deciding either before the session would be deciding it without the only evidenc
 *A data carrier with a physical body, whose identity outlives both.*
 
 #### E2-01 · `ParcelId`, `ParcelRecord`, `ParcelRegistry`
-**Depends:** E14-04 · **Test:** L1
+**Depends:** E14-04 · **Test:** L1 · **Status:** 🔶 **Partial**
 
-- [ ] `ParcelId` is a host-assigned `readonly record struct` over a `uint` (Arch §5.1).
-- [ ] `ParcelRegistry` maps id → record and is **the only owner of parcel state**.
+- [x] `ParcelId` is a host-assigned `readonly record struct` over a `uint` (Arch §5.1). Ids count
+      from one, so a `default` `ParcelId` names no parcel instead of the first one registered —
+      proved by breaking it, which reddens exactly one test and no others.
+- [x] `ParcelRegistry` maps id → record and is **the only owner of parcel state**. It assigns every
+      id, and it never forgets one, because the report is built at the whistle (Vision §7).
 - [ ] **No gameplay state on any node** — a node is a view of a record (Standards §12). E2-02 is the
-      test that proves it.
-- [ ] XML docs on every public Domain member, with `<see cref="..."/>` that resolves so the Game
-      layer gets working hover text.
-- [ ] No Godot type in any signature, `Vector3` included — Domain has its own `Vec3`. This is the
-      rule most likely to be broken by accident (Standards §0).
+      test that proves it. **Owed:** `ParcelRecord` now holds `CarriersRequired` and `IsLocked`, but
+      `Carryable` still carries both as `[Export]` fields, so they are authored in two places until
+      **E2-04** gives a node the `ParcelId` to look one up by. Both `ponytail:` comments say so, and
+      this is the only reason the story is not Done.
+- [x] XML docs on every public Domain member, with `<see cref="..."/>` that resolves so the Game
+      layer gets working hover text. Verified by the compiler rather than by eye: Domain builds
+      clean under `-p:GenerateDocumentationFile=true`, where a missing doc is CS1591 and an
+      unresolved `cref` is CS1574, and Domain treats warnings as errors.
+- [x] No Godot type in any signature, `Vector3` included — Domain has its own `Vec3` (Standards §0).
+      The architecture test now runs Arch §10.5's assertion **verbatim** — `typeof(ParcelRecord)`,
+      which stood in as `Vec3` until this story.
 
 #### E2-02 · Identity survives the node being freed
 **Depends:** E2-01, E0-05 · **Test:** L2
@@ -1228,11 +1241,12 @@ Read off the dependency graph, not off preference. Everything here has its depen
 
 **Unblocked and off that path**, worth picking up alongside:
 
-- **E2-01** `ParcelId`, `ParcelRecord`, `ParcelRegistry` — pure L1, needs only E14-04, and it is
-  the gate on all of E2, most of E3, and E13-01. The largest amount of downstream work unlocked by
-  one story in the whole document. It also retires two `ponytail:` comments already written against
-  it: `GrabDirector` addresses loads by scene path, and `Carryable` holds capacity and the policy
-  lock as `[Export]` fields.
+- **E2-02 and E2-04** — E2-01 landed the Domain types, so the gate on all of E2, most of E3 and
+  E13-01 is now the wiring rather than the design. E2-04 is the one that pays: a node given its
+  `ParcelId` at spawn retires both `ponytail:` comments written against E2-01 — `GrabDirector`
+  addressing loads by scene path, and `Carryable` holding capacity and the policy lock as
+  `[Export]` fields. E2-02 is the test that the record outlives the node, and both need E0-05,
+  which is done.
 - **E2-05** Replication classes — E1-06 ran into exactly what it exists for: a client that both
   simulates and receives a body fights itself. The L3 harness freezes parcels on non-authority
   peers to work around it, and that workaround is a note in this document rather than a design.

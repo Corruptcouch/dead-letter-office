@@ -10,9 +10,9 @@ namespace Dlo.Domain.Tests;
 /// </summary>
 public class ArchitectureTests
 {
-    // Arch §10.5 writes this against `ParcelRecord`, which does not exist until E2-01.
-    // `Vec3` is the stand-in and any Domain type does the job: the assertion is about the
-    // assembly, and there is only one.
+    // Now arch §10.5's assertion verbatim: E2-01 landed `ParcelRecord`, which the section
+    // names and which stood in as `Vec3` until it existed. Any Domain type does the job -
+    // the assertion is about the assembly, and there is only one.
     //
     // What this catches, measured by breaking it both ways (E14-06, 2026-08-24):
     // adding a GodotSharp PackageReference to Dlo.Domain and building leaves this test
@@ -24,5 +24,5 @@ public class ArchitectureTests
     [Fact]
     public void Domain_does_not_reference_Godot() =>
         Assert.DoesNotContain("GodotSharp",
-            typeof(Vec3).Assembly.GetReferencedAssemblies().Select(a => a.Name));
+            typeof(ParcelRecord).Assembly.GetReferencedAssemblies().Select(a => a.Name));
 }
