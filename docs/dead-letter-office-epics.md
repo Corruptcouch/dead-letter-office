@@ -924,15 +924,18 @@ decision pass itself surfaced (rows 6 and 7), and two toolchain items that arriv
 | 1 | **Does the GodotSteam C# path work at 4 peers?** Bindings lag the extension; the `SteamMultiplayerPeer` C# port is seven commits and has no channels (Arch §3.5). **Blast radius is now E12 + E18 only** — the voice decision removed E7 from it | E12, E18, shipping | Tech | **E0, week one** |
 | 2 | **Select the pure-C# Opus package** — managed only, no native binary, all three desktop targets. The project's one new runtime dependency, so it needs an AGENTS.md rung-4 justification in review | E7 | Tech | E7's first story |
 | 3 | Measure replication cost against Arch §8 with a full belt | E4 sign-off | Tech | Before E4 is done |
-| 4 | Jolt joint stability for two-person carry of a heavy body | E1 | Tech | First E1 spike |
 | 6 | **Employee name source when Steam is unavailable.** Names derive from the Steam persona (E5), but ENet dev builds, CI and the L3 suite have no persona. Needs a fallback generator — and since the report and the PA both print these names, "Player 2" is a tone regression | E5, E7's PA lines, E8's report | Tech + Owner | With E5 |
 | 7 | **Does the Former Personnel wall need a cap?** Records are append-only and never expire, so the file grows without bound and the wall eventually cannot be read. Probably a roll-off or a "notable employees" filter | E11's wall | Tech + Owner | With E11 |
 | 8 | The four gate decisions themselves | Everything downstream of each gate | Owner + E19 | Per gate |
 | 9 | **Install 4.7.2 export templates.** The machine has 4.6 templates only; the first export fails until this is done. Not a decision — a task, recorded so it is not discovered at export time | E18 | Tech | Before E18-01 |
 
 *Item 5 — the headless multi-peer harness — is answered: **four processes**, built and measured
-on 2026-08-24 (E0-08, E0-09, arch §11). The remaining numbers are left where they are, because
-the stories document cites them by number.*
+on 2026-08-24 (E0-08, E0-09, arch §11). **Item 4 — Jolt joint stability — is answered too**, on
+2026-08-25 (E1-01, arch §11): the instability it was written to find does not exist at any mass
+to 500 kg, but rigid joints turn out to express no weight and Jolt does not implement
+`PinJoint3D.impulse_clamp`, so E1-04 must grip with a sprung `Generic6DofJoint3D` at a stiffness
+near 100 × mass. The remaining numbers are left where they are, because the stories document
+cites them by number.*
 
 ### Resolved 2026-08-24
 

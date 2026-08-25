@@ -331,14 +331,27 @@ item 4, Arch open item 3
 Do this before E1-04, not before E1-08. If heavy bodies on joints are unstable, the *grab* design
 changes, not just the co-op carry.
 
-- [ ] A heavy body held by two joints from two characters does not explode, jitter or tunnel at
-      Jolt's default substep count.
-- [ ] The finding names **the mass and stiffness envelope that stays stable**, and what happens
-      outside it.
-- [ ] If it is unstable, the finding names the fix — substeps, joint type, mass-ratio ceiling —
-      *before* E1-08 starts rather than during it.
-- [ ] One L2 scene is kept as a regression check, so a physics-settings change that breaks this
-      fails a test rather than a playtest.
+**Reported 2026-08-25. The risk it was written to find does not exist; a different one does.**
+124 configurations measured at Jolt's defaults. Full finding in Arch §11.
+
+- [x] A heavy body held by two joints from two characters does not explode, jitter or tunnel at
+      Jolt's default substep count. **Confirmed to 500 kg** — no explosion, no tunnelling, no
+      NaN, on rigid or sprung joints. `velocity_steps = 10` / `position_steps = 2` need no
+      change, and E1-08's two-joint design is safe as drawn.
+- [x] The finding names **the mass and stiffness envelope that stays stable**, and what happens
+      outside it. **Sprung `Generic6DofJoint3D` at stiffness ≈ 100 × mass**, damping ≥ 100 —
+      ~5 cm of sag at every mass tested. Below ~50 × mass it oscillates, then sags out of the
+      carriers' hands entirely. Above ~1000 × mass it is rigid again.
+- [x] If it is unstable, the finding names the fix. **It is not.** But two things change the
+      design, and both land *before* E1-04 rather than during it:
+      **(a) a rigid joint expresses no weight** — two rigid pins to kinematic hands hold any
+      mass perfectly and the parcel simply follows, which is the opposite of vision §3.1;
+      **(b) `PinJoint3D.impulse_clamp` is unimplemented under Jolt** — the engine logs that it
+      is ignoring the value. The only compliance Jolt honours is the 6DOF linear spring.
+- [x] One L2 scene is kept as a regression check, so a physics-settings change that breaks this
+      fails a test rather than a playtest. **`JointStabilityTests`**, which guards the solver
+      settings as well as the carry — proved necessary: detuning to `velocity_steps = 2` leaves
+      the carry visibly fine while invalidating every number above.
 
 #### E1-02 · First-person controller — move, look, jump, crouch
 **Depends:** E14-03 · **Test:** L2
@@ -366,7 +379,10 @@ changes, not just the co-op carry.
 - [ ] The real joint exists **only on the host**. A client never creates a physics joint (Arch §3.3).
 - [ ] `RequestGrab` validates range, current holder and policy lock before resolving.
 - [ ] `GrabResolved` names the winning holder and is `Reliable` — it is a decision, not a stream.
-- [ ] Weight is expressed **only** through Jolt mass and joint compliance.
+- [ ] Weight is expressed **only** through Jolt mass and joint compliance — which E1-01 has
+      now reduced to one mechanism: a `Generic6DofJoint3D` linear spring at stiffness ≈ 100 ×
+      mass, damping ≥ 100. **Not a `PinJoint3D`**: Jolt ignores its `impulse_clamp`, and a
+      rigid pin to a kinematic hand carries any mass weightlessly.
 
 #### E1-05 · Optimistic client attach
 **Depends:** E1-04 · **Test:** L2, confirmed at L3 by E1-06
@@ -408,7 +424,10 @@ arrives there, not here.*
       **can** be by two — two host-owned joints on one body (Arch §3.3).
 - [ ] The configuration stays inside E1-01's stable envelope.
 - [ ] When one carrier lets go, the object **drops**. It does not launch, and it does not teleport
-      to the remaining carrier.
+      to the remaining carrier. **E1-01 measured what makes it launch:** grip stiffness. At
+      ≈ 100 × mass the release speed is ~1.4 m/s (a drop); in the over-stiff band it reaches
+      10 m/s (a launch). If this criterion fails, the grip is too stiff — it is not a bug in
+      the release path.
 
 *Capacity is a domain fact. Until `ParcelRecord` exists (E2-01) it lives on a placeholder body;
 moving it there is a rename, and E2-01 owns it.*

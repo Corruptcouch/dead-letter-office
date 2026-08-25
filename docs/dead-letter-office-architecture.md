@@ -649,6 +649,11 @@ Vision §3.1's distinction is the highest-risk feel requirement in the build. Tw
   Jolt says its mass is high and the joint is compliant — never because the controller
   slowed down or the camera got sluggish. Input damping to simulate weight is the specific
   mistake that makes the game read as broken. It is banned.
+  **"Compliant" now has one meaning, measured** (E1-01, §11): a `Generic6DofJoint3D` linear
+  spring at **stiffness ≈ 100 × mass**, damping ≥ 100. Not a pin joint — a rigid pin to a
+  kinematic hand holds any mass perfectly and so expresses no weight at all, and Jolt does not
+  implement `PinJoint3D.impulse_clamp`. This is the whole of the weight budget; there is
+  nowhere else for it to come from.
 
 Godot 4.7's new IK framework (`TwoBoneIK3D`, `FABRIK3D`, `CCDIK3D`) is the cheap path to
 hands that visibly reach the box they are holding, including the two-person carry. Use it
@@ -863,11 +868,11 @@ they are answered by measurement or a spike, not by a decision.**
 | ---: | :-- | :-- | :-- |
 | 1 | **Prove the GodotSteam C# path** — bindings fork, `SteamMultiplayerPeer` without channels, at 4 peers (§3.5). **Blast radius reduced:** E7 no longer depends on this. **Cost corrected 2026-08-25:** it needs no paid app id — 480 (Spacewar) initialises the real API — but it does need four Steam accounts on four machines, and two peers on two machines answers most of it | E12, shipping | **E0, week one.** Not negotiable |
 | 2 | Measure real replication cost against §8's budget with a full belt | §3.4's three-class design | Before E4 conveyors are considered done |
-| 3 | Jolt joint stability for two-person carry of a heavy body | E1 | First E1 spike |
 | 5 | Select the pure-C# Opus package — managed only, no native binary, all three desktop targets (§6.5) | E7 | With E7's first story |
 
-*Item 4 — the headless multi-peer harness — is answered and has moved to the table below. The
-remaining numbers are left where they are, because the stories document cites them by number.*
+*Items 3 and 4 — Jolt joint stability and the headless multi-peer harness — are answered and
+have moved to the table below. The remaining numbers are left where they are, because the
+stories document cites them by number.*
 
 **Resolved in v0.2** — kept visible so the reasoning is not re-litigated:
 
@@ -879,6 +884,7 @@ remaining numbers are left where they are, because the stories document cites th
 | Shift length | **8–12 min × 3–6 shifts**, provisional, curve is a data file, Gate 2 refines |
 | Target framework, now that the .NET 10 SDK is installed | **`net10.0` everywhere, overriding the `net8.0` Godot generates.** Measured, not assumed: it builds, Godot's own build path builds it, the editor leaves an already-set value alone, and it runs. The runtime is `.NET 10` at either TFM, so `net8.0` would only mean compiling against an older BCL than the one executing — and one that leaves support in November 2026 (§1.4). **Held in `Directory.Build.props` for five projects and in `Dlo.Game.csproj` for the sixth**, because Godot re-adds a missing TFM line and the project body beats the props file (§1.4, E14-03). Export is the one leg still unverified, and E18-01 verifies it |
 | Godot headless multi-peer harness: 4 processes or 4 `SceneTree`s? (was item 4) | **Four processes**, built and measured 2026-08-24 (E0-08, E0-09). Cost is not what decides it: a trivial four-peer connect-and-exchange took **435 ms** in one process against **663 ms** in four, both far inside §10.1's "minutes". What decides it is that **one Godot process has exactly one physics world** — two bodies in two sibling subtrees shoved each other apart, measured — so four in-process peers would hold four copies of every parcel in one simulation. §10.4's physics-bearing assertions (grab contention, identity through tube transit, ledger agreement) would all have been quietly wrong. Statics, autoloads and `ProjectSettings` are shared for the same reason, and host authority is a claim about separate machines. The harness lives in `tests/Dlo.Net.Tests`, which is its own Godot project so that no harness-only code ships; the whole finding is on `FourPeerSession` |
+| Jolt joint stability for a two-person carry (was item 3) | **Not a risk — but it found a different one.** Measured 2026-08-25 (E1-01), 124 configurations at Jolt's defaults (`velocity_steps = 10`, `position_steps = 2`, 60 Hz). **Nothing exploded, tunnelled or produced a NaN at any mass to 500 kg**, on rigid pins or on sprung joints; the solver needs no retuning and E1-08's design is safe. What the spike found instead is that **the compliance arch §6.1 depends on barely exists**: two *rigid* joints to kinematic hands hold any mass perfectly and therefore express **no weight at all** — the parcel just follows the hands — and `PinJoint3D`'s `impulse_clamp`, the obvious knob, is **unimplemented under Jolt**, which logs "Pin joint impulse clamp is not supported when using Jolt Physics" and ignores the value. The only compliance Jolt honours is a `Generic6DofJoint3D` **linear spring**, and its stable envelope is **stiffness ≈ 100 × mass**, which yields ~5 cm of sag at every mass tested. Below ~50 × mass the parcel oscillates and then sags out of the carriers' hands; above ~1000 × mass it is rigid again, and — the E1-08 consequence — **release speed climbs from ~1.4 m/s to over 10 m/s, so an over-stiff grip launches the parcel when one carrier lets go instead of dropping it.** Damping ≥ 100 is the floor; below it the softer half of the band jitters. The regression scene is `JointStabilityTests` |
 | Does `Dlo.Domain` stay on `netstandard2.1`? | **No — `net10.0`, same as everything else.** It had no consumer outside this repo, and it was what forced the `IsExternalInit` declaration for `readonly record struct`. That workaround is deleted rather than documented |
 
 ---
