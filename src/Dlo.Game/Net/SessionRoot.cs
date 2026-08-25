@@ -89,7 +89,12 @@ public partial class SessionRoot : Node
 
     private void StartWith(MultiplayerPeer peer)
     {
-        Multiplayer.MultiplayerPeer = peer;
+        // The one place the lag harness is attached (E0-07). It returns the peer untouched
+        // unless a development build has asked for it, and throws rather than wrapping if the
+        // flag survived into a release export - a shipping build that silently added 150 ms to
+        // every packet would look exactly like a bad connection, and nobody would think to go
+        // looking for a project setting.
+        Multiplayer.MultiplayerPeer = LatencyPeer.WrapIfConfigured(peer);
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
         BeginSession();

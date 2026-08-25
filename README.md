@@ -154,6 +154,31 @@ for you:
 installed under `tests/Dlo.Game.Tests/addons/`. That is not installed here and nothing needs
 it; the test explorer covers the same ground without adding a tracked dependency.)*
 
+### Simulating a bad connection
+
+`LatencyPeer` (E0-07) wraps whatever transport is in use and holds **incoming** packets back, so
+four peers on one desk behave like four on real connections. Vision §15's question is whether a
+shared physical object still feels believable *over real internet*, so this is required
+infrastructure rather than a nicety — but E19-03 is explicit that it **supplements** four real
+connections at Gate 1 and never substitutes for them.
+
+Three project settings, all off by default:
+
+| Setting | Meaning |
+| :-- | :-- |
+| `dlo/network/latency_enabled` | Turns it on. Off by default |
+| `dlo/network/latency_ms` | One-way delay. **A round trip costs twice this** |
+| `dlo/network/latency_jitter_ms` | Random extra delay per packet, 0..this |
+
+- **It cannot ship.** With the flag on in a non-debug build, `SessionRoot` throws at the moment
+  it would wrap. A release build that silently added 150 ms to every packet is indistinguishable
+  from a bad connection, and nobody would think to go looking for a project setting.
+- **The ENet handshake is not delayed** — connections complete below the packet API this
+  decorates. Only application traffic is held.
+- **Only `Unreliable` packets may overtake each other.** `Reliable` and `UnreliableOrdered` keep
+  their order, because ENet already guaranteed it; reordering them here would simulate a bug
+  that cannot happen and tear scene replication apart on the way.
+
 ### Steam — not running yet
 
 Nothing in the build talks to Steam: `SteamTransport` is a stub that throws, and E0-01 is the

@@ -256,22 +256,32 @@ entire reason that decision was worth making.*
 #### E0-05 · `MultiplayerSpawner` wrapper with a custom spawn function
 **Depends:** E0-04 · **Test:** L2
 
-- [ ] Spawning takes a small explicit args struct, never a whole record — the payload is a
-      deliberate decision at every call site (Arch §5.2).
-- [ ] A client builds a node from spawn args alone, with no additional round trip.
-- [ ] Adding a spawnable type requires no change to the wrapper.
+- [x] Spawning takes a small explicit args struct, never a whole record — the payload is a
+      deliberate decision at every call site (Arch §5.2). `NetworkSpawner.Payload` is `[key,
+      args]` and nothing else, asserted.
+- [x] A client builds a node from spawn args alone, with no additional round trip. The builder
+      is a closure over nothing; **the cross-process half is E2-04's**, which inspects the
+      serialised bytes — one process cannot prove a client had no second source.
+- [x] Adding a spawnable type requires no change to the wrapper. Proved with two types
+      registered in the same test.
 
 #### E0-06 · Replication classes — synchronizer configuration
 **Depends:** E0-04 · **Test:** L2
 
 The mechanism only. Parcels start using it in E2-05.
 
-- [ ] Three named configurations exist with **distinct `replication_interval` values**, set per
-      class rather than globally (Arch §3.4).
-- [ ] A node can be promoted and demoted between classes at runtime without respawning.
-- [ ] Every RPC this story introduces states `TransferMode` and `CallLocal` deliberately. Nothing
-      positional is `Reliable`, and `CallLocal = false` on an intent the host must also honour is
-      a silent no-op on one machine in four (Arch §3.1).
+- [x] Three named configurations exist with **distinct `replication_interval` values**, set per
+      class rather than globally (Arch §3.4). `Dynamic` 1/30 · `Railed` 0 · `Sleeping` 3600.
+      Railed's zero is not "off" but "look every tick": its rail tuple is *watched*, so the
+      interval governs how fast a change is noticed, and nothing changes after entry. Sleeping's
+      hour is a deliberate absurdity — if a property is ever left on `Always` by mistake the
+      result is one stray packet an hour, not a silent 30 Hz stream from every parcel at rest.
+- [x] A node can be promoted and demoted between classes at runtime without respawning. Both
+      directions asserted, with the node's and synchronizer's instance ids unchanged.
+- [x] Every RPC this story introduces states `TransferMode` and `CallLocal` deliberately.
+      **This story introduces no RPC** — everything rides `MultiplayerSynchronizer`. Recorded
+      rather than skipped, because "no RPCs were added" and "nobody thought about the RPC
+      defaults" look identical in a diff.
 
 #### E0-07 · `LatencyPeer` development decorator
 **Depends:** E0-02 · **Test:** L2
@@ -279,11 +289,17 @@ The mechanism only. Parcels start using it in E2-05.
 Vision §15's question says *over real internet*. Without this, the MVP answers an easier question
 than the one that matters — which makes this **required infrastructure, not a nicety** (Arch §3.5).
 
-- [ ] Configurable fixed delay plus jitter, wrapping any `MultiplayerPeer`.
-- [ ] Enabled by flag, and **impossible to enable in a shipping build** — an export guard or a
-      startup assertion, not a convention.
-- [ ] Carries Arch §3.5's `ponytail:` comment verbatim: ceiling *and* upgrade path. A `ponytail:`
-      with only one half is a TODO in a costume, and Definition of Done rejects it.
+- [x] Configurable fixed delay plus jitter, wrapping any `MultiplayerPeer`. It delays what
+      **arrives**, so a round trip costs twice the setting. Two things are worth knowing:
+      the ENet **handshake is not delayed** (connection completes below the packet API this
+      decorates), and **only `Unreliable` packets may reorder** — re-breaking an order ENet has
+      already guaranteed would simulate a bug that cannot happen and tear scene replication
+      apart doing it.
+- [x] Enabled by flag, and **impossible to enable in a shipping build** — an export guard or a
+      startup assertion, not a convention. `WrapIfConfigured` throws in a non-debug build. The
+      rule is a separate pure predicate so it can be asserted from all four directions; the case
+      that matters only exists inside a release export, where no test can stand.
+- [x] Carries Arch §3.5's `ponytail:` comment verbatim: ceiling *and* upgrade path.
 
 #### E0-08 · L3 harness feasibility spike
 **Depends:** E14-05, E0-02 · **Test:** spike · **Answers:** epics open item 5, Arch open item 4
@@ -356,13 +372,20 @@ changes, not just the co-op carry.
 #### E1-02 · First-person controller — move, look, jump, crouch
 **Depends:** E14-03 · **Test:** L2
 
-- [ ] Move, look, jump and crouch are local and immediate on all four machines: **0 frames of
-      network wait** (Arch §8), measured rather than assumed.
-- [ ] **No input damping anywhere.** Not on movement, not on the camera, not on look sensitivity,
-      not "only while carrying something heavy." It is banned (Arch §6.1), and it is the specific
-      mistake that makes this game read as broken instead of funny.
-- [ ] The character body's multiplayer authority is the owning peer — **see the gap recorded on
-      authority; do not treat this bullet as the ruling.**
+- [x] Move, look, jump and crouch are local and immediate on all four machines: **0 frames of
+      network wait** (Arch §8), measured rather than assumed. Every test asserts the result of a
+      *single* `Step` or `Look` call with no peer present at all.
+- [x] **No input damping anywhere.** Two calls of `Look` turn exactly twice as far as one;
+      movement reaches full speed on the first frame **and stops on the frame the key is
+      released** — the forgotten half, since a body that accelerates instantly and glides to a
+      halt is still damped. Crouch moves the head in one step, both ways.
+- [x] The character body's multiplayer authority is the owning peer. **This is now the ruling**
+      (gap 1, settled 2026-08-25), not an assumption.
+
+*The authority test initially passed with the guard deleted — with no keys held, a `Step` that
+ran wrote back the velocity the body already had. It now starts from a sideways velocity that
+only a `Step` which ran would clear. Standards §8's "a test that cannot fail is worse than no
+test", caught by the break check rather than by reading.*
 
 #### E1-03 · Hands and IK
 **Depends:** E1-02 · **Test:** L2
@@ -1074,6 +1097,17 @@ than a decision.
 | 5 | **Host-loss teardown is listed in two epics.** It is a story in E0 *and* in E12. Split here as E0-10 (session ends cleanly, asserted at L3) and E12-05 (the player-facing message and return to lobby). Confirm or merge | E0-10, E12-05 | Tech |
 | 6 | **Scanner and chart appear in both E3 and E15.** Split here as E3 owning the mechanism and E15 owning the surface. E15's header also says Tier 2 while the dependency diagram says it runs from Tier 1 — the diagram is right, since E3 cannot be played without a readable chart | E3-02, E3-05, E15-01, E15-02 | Tech |
 | 7 | **Gate 2 needs Gate 1's kit.** Gate 2 lives in E3 (Tier 1), but it needs four players and a lobby, which is Gate 1's line. Sequence is presumably Gate 1 → Gate 2 in the same window; worth stating, because "Gate 2 lives in E3" reads as though it comes first | E3-09, E19-05 | Owner |
+
+**Gap 1 is settled — the owning peer owns the character transform.** Ruled 2026-08-25, and it
+is the reading this table already assumed. Each character body gets
+`SetMultiplayerAuthority(ownerPeerId)`, so a player's own body is authoritative on their own
+machine and replicates outward: input is immediate because the body is *owned*, not because it
+is predicted. That keeps arch §3.3's "grab is the only optimistic path" literally true, and
+leaves §3.1 intact where it matters — the host still owns every fact about the shift: who holds
+what, which post is occupied, what the ledger records. **No host-side position validation**, and
+that is deliberate rather than overlooked: this is a four-player, friends-and-invites-only game
+(vision §16), so a cheating client is not in the threat model. If that ever changes, the fix is
+a host validator plus a corrective RPC, and it does not disturb anything built on this ruling.
 
 **Gap 5 is settled** — by building it rather than by ruling on it. E0-10 shipped as the split
 this table proposed: it asserts at L3 that a client disconnect leaves the host and the other

@@ -289,6 +289,15 @@ Reliable, TransferChannel = 0)]`. **Two of those defaults are traps in this game
   the host must also honour when the host presses the button, that is a silent no-op on one
   of the four machines. Set it deliberately every time.
 
+**The one node a client owns is its own body** (E1-02, settled 2026-08-25 as gap 1 in the
+stories document). `SetMultiplayerAuthority(ownerPeerId)` on the character means a player's own
+body is authoritative on their own machine and replicates outward — input is immediate because
+the body is *owned*, not because it is predicted, so §3.3's "the only optimistic path" stays
+literally true and the rule above is untouched. A position is not a fact about the shift. The
+host still owns every one of those: who holds what, which post is occupied, what the ledger
+records. There is no host-side position validation and that is deliberate — four players,
+friends and invites only (vision §16), so a cheating client is not in the threat model.
+
 The interaction rule, stated once so no story has to re-derive it:
 
 > **Clients send intent. The host sends outcomes. A client never sends a fact.**
