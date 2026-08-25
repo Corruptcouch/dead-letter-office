@@ -117,11 +117,16 @@ public class ContentionTests(ContentionRun run, ITestOutputHelper output)
             var gap = Distance(truth, seen);
 
             // "The loser sees the parcel move toward the winner" (E1-06), as an assertion: the
-            // loser's copy converges on the host's, rather than being left in the hands of a grab
-            // that did not happen. A loser stuck holding its prediction would sit ~0.5 m away, at
-            // its own hand.
+            // loser's copy converges on the host's rather than being left in the hands of a grab
+            // that did not happen.
+            //
+            // Measured 0.018 m, which is one replication interval of sway in the winner's hands.
+            // The line is at 0.10 - five times the measurement, and far below the two numbers that
+            // matter: a loser still holding its own prediction sits at its own hand (~1-2 m away,
+            // since the carriers stand a metre out on opposite sides), and a client left simulating
+            // the body it does not own settles ~0.25 m low.
             Assert.True(
-                gap < 0.25,
+                gap < 0.10,
                 $"{peer.Role} has the parcel {gap:F3} m from where the host does "
                 + $"(host {Host.Field(PeerReport.Parcel)}, {peer.Role} {peer.Field(PeerReport.Parcel)}).");
         }
@@ -136,11 +141,13 @@ public class ContentionTests(ContentionRun run, ITestOutputHelper output)
         {
             var jump = Number(peer.Field(PeerReport.Jump));
 
-            // It does not teleport (E1-06). At 60 Hz a parcel moving even 10 m/s covers 0.17 m in a
-            // frame, so a third of a metre is comfortably above anything physical and far below the
-            // ~0.5 m snap a rolled-back prediction would produce.
+            // It does not teleport (E1-06). Measured 0.058 m on a client and 0.018 m on the host -
+            // the client's is larger because it sees the parcel in replication steps rather than
+            // every frame. The line is at 0.15, and what it catches is a rollback that snaps the
+            // parcel across the gap between two players: those measured 0.36 m to 1.24 m before the
+            // prediction was made visual-only.
             Assert.True(
-                jump < 0.33,
+                jump < 0.15,
                 $"{peer.Role} saw the parcel jump {jump:F3} m in one frame.");
         }
     }

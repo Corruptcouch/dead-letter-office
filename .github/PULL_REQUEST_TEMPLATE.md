@@ -30,7 +30,7 @@ ever catch:
   type outside `src/Dlo.Game/Net/`:
 
   ```
-  grep -rn --include=*.cs -E "ENetMultiplayerPeer|ENetConnection|SteamMultiplayerPeer|Steamworks|CSteamID|SteamAPI" src/ tests/ tools/     | grep -v "^src/Dlo.Game/Net/"     | grep -v "^tests/Dlo.Game.Tests/LatencyPeerTests.cs"     | grep -vE "^[^:]+:[0-9]+:[[:space:]]*(//|\*)"
+  grep -rn --include=*.cs -E "ENetMultiplayerPeer|ENetConnection|SteamMultiplayerPeer|Steamworks|CSteamID|SteamAPI" src/ tests/ tools/ | grep -v "^src/Dlo.Game/Net/" | grep -v "^tests/Dlo.Game.Tests/LatencyPeerTests.cs" | grep -v "^tests/Dlo.Game.Tests/GrabPredictorTests.cs" | grep -vE "^[^:]+:[0-9]+:[[:space:]]*(//|\*)"
   ```
 
   Expect **no output**. This is what keeps E0-03 a drop-in instead of a migration, and it is
@@ -39,11 +39,20 @@ ever catch:
   The last filter drops comment lines — a comment naming `SteamAPI_Init` to explain a failure
   mode is not a seam violation, and it was making this check print.
 
-  `LatencyPeerTests` is excluded because `LatencyPeer` is a decorator **over** a
-  `MultiplayerPeer`, so testing it needs a real one to wrap — the one legitimate exception, and
-  it is named here rather than tolerated as noise. **If this grep ever prints, do not add
-  another exclusion without saying why in the PR.** A check whose output reviewers have learned
-  to skim is not a check.
+  Two test files are excluded, and both are named here rather than tolerated as noise:
+
+  - `LatencyPeerTests`, because `LatencyPeer` is a decorator **over** a `MultiplayerPeer`, so
+    testing it needs a real one to wrap.
+  - `GrabPredictorTests` (E1-05), because it needs a peer that **cannot answer** — a client with no
+    host — to prove the optimistic attach does not wait for the network, and a real server peer so
+    that host mode is a fact rather than inferred from the absence of one.
+
+  **If this grep ever prints, do not add another exclusion without saying why in the PR.** A check
+  whose output reviewers have learned to skim is not a check. The rule it protects is E0-02's: no
+  *gameplay* code names a transport type, so E0-03 stays a drop-in rather than a migration.
+
+  The last filter drops comment lines — a comment naming `SteamAPI_Init` to explain a failure mode
+  is not a seam violation, and it was making this check print.
 
 - [ ] Anything asymmetric-information-shaped has a **negative** test (arch §10.4, standards
   §8). Nothing looks broken when a client knows too much, so this is the one that regresses

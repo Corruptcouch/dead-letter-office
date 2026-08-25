@@ -339,13 +339,19 @@ public partial class GrabDirector : Node
     /// stretch — halving the stiffness only buys more sag, and a lone carrier still lifted a
     /// two-person 50 kg box to within 21 cm of their hand. Jolt offers no force cap to fix it
     /// (<c>PARAM_LINEAR_SPRING</c> has stiffness, damping and equilibrium and nothing else, and
-    /// E1-01 already found <c>impulse_clamp</c> unimplemented). So it is a flag, and it says so.
-    /// </para>
-    /// <para>
-    /// The consequence is the co-op fiction working by itself: both carriers take hold, and the box
-    /// comes up on the second grip rather than on the first.
+    /// E1-01 already found <c>impulse_clamp</c> unimplemented). So it is a flag, and it says so —
+    /// and the co-op fiction falls out of it for free: the box comes up on the second grip.
     /// </para>
     /// </remarks>
+    // ponytail: a granted grab snaps the load into the carry pose in one frame.
+    // Ceiling: it is a visible teleport of up to the carrier's reach - measured at ~1.9 m in the L3
+    // harness, where the carrier stands 1 m away. Every peer sees it, not just the grabber, and it
+    // is the one thing in the carry that does not look physical.
+    // Upgrade: move the HAND to the load's grip on grant, joint there, then animate the hand back to
+    // the carry pose - the spring then drags the load up and the lift is simulated rather than
+    // asserted. It costs an anchor animation and nothing else; the joint recipe does not change.
+    // Deliberately not done before Gate 0 (E1-10), because the feel session is what should decide
+    // whether a snap reads as awkward or as broken, and that is exactly the word it collects.
     private void Crew(Carryable load, List<Hold> held)
     {
         foreach (var hold in held)

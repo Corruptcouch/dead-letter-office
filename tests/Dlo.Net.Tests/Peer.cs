@@ -548,6 +548,18 @@ public partial class Peer : Node
             ReplicationInterval = 0.05,
         });
 
+        // Frozen on everyone but the host, and this is the fix for a real artefact rather than a
+        // convenience. A RigidBody3D that is BOTH locally simulated and transform-replicated fights
+        // itself: the synchronizer sends position but not velocity, so a client's copy keeps
+        // accelerating downward, gets snapped back every replication interval, and settles about
+        // 25 cm below the host's - measured 2026-08-25, and it showed up as two intermittently
+        // failing assertions rather than as anything that looked like a bug.
+        //
+        // E2-05 is what answers this properly: arch §3.4's three replication classes decide what a
+        // client does with a parcel it does not own. Until then the harness says the plain thing -
+        // a peer that is not the authority does not simulate the body.
+        _parcel.Freeze = !IsHost;
+
         AddChild(_parcel);
         _lastParcelAt = _parcel.Position;
 

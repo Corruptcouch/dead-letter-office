@@ -22,29 +22,34 @@
 ## Status at a glance
 
 **Updated 2026-08-25**, and verified against the working tree rather than from memory: every
-story marked Done below had its acceptance criteria re-checked, and the two that fall short are
+story marked Done below had its acceptance criteria re-checked, and the ones that fall short are
 marked as such instead of being rounded up.
 
 | | Stories | Where it stands |
 | :-- | :-- | :-- |
 | **E14** Foundation | **8 done**, 1 partial | Complete bar E14-07's deliberate-failure run |
 | **E0** Netcode spine | **8 done**, 2 blocked | Spine is in and L3-proven. Steam is the only hole |
-| **E1** Embodiment | **2 done**, 8 open | Both spikes reported, controller in. **E1-03 is next** |
+| **E1** Embodiment | **9 done**, 1 blocked | Feature work complete. **Only Gate 0 itself is left** |
 | **E2 · E3 · E4** Tier 1 | 0 of 30 | Not started. E2-01 is unblocked today |
-| **Alongside** E12·13·15·17·18·19 | 0 of 29 | Not started. E15-04 and E19-01 are needed *before* Gate 0 |
+| **Alongside** E12·13·15·17·18·19 | 0 of 29 | Not started. **E15-04 and E19-01/02 now block Gate 0** |
 
-**18 of 88 decomposed stories are done.** The two exceptions worth naming, because both are
-cheap and both are the kind of thing that quietly stays open:
+**25 of 88 decomposed stories are done.** Suite: **L1 11 · L2 77 · L3 41**, all green, `dotnet
+format` clean.
 
+The three that fall short, all named rather than rounded up:
+
+- **E1-10 — Gate 0.** Every E1 story under it is done, but the gate is a playtest: it needs a
+  person who has not seen the game, plus **E15-04** and **E19-01 → E19-02**. It is now the single
+  thing standing between this project and its first real verdict.
 - **E14-07** — CI runs everything it should and is green, but nobody has watched it go **red**.
   A pipeline never seen to fail is not known to work as a gate.
 - **E0-01 / E0-03** — the Steam path. Blocked on Steam accounts on separate machines, not on any
   decision. The seam around it is finished, so nothing else waits on it.
 
-**Gate 0 is the next milestone**, and its critical path is
-`E1-03 → E1-04 → E1-07 → E1-09`, with **E15-04** (settings) and **E19-01 → E19-02** (the
-instrument) needed alongside it. A participant who cannot set their own sensitivity is testing
-your mouse, not your grab feel — which is why E15-04 is on this path and not after it.
+**Gate 0 is the next milestone and its code is finished.** What remains is the kit around it:
+**E15-04** (look sensitivity, invert-Y, FOV) and **E19-01 → E19-02** (the protocol and the
+instrument). A participant who cannot set their own sensitivity is testing your mouse, not your
+grab feel — which is why E15-04 was always on this path rather than after it.
 
 ---
 
@@ -433,65 +438,128 @@ only a `Step` which ran would clear. Standards §8's "a test that cannot fail is
 test", caught by the break check rather than by reading.*
 
 #### E1-03 · Hands and IK
-**Depends:** E1-02 · **Test:** L2
+**Depends:** E1-02 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] Godot 4.7's `TwoBoneIK3D` / `FABRIK3D` is used **before** any procedural arm code is written
+- [x] Godot 4.7's `TwoBoneIK3D` / `FABRIK3D` is used **before** any procedural arm code is written
       (`AGENTS.md` rung 3, Standards §10).
-- [ ] Hands visibly reach the grip point of the held object on every peer, not only the holder's.
-- [ ] Hand pose is **derived** from held-object plus character state, never replicated per frame.
-      Hands are the easiest accidental bandwidth leak in the build.
+- [x] Hands visibly reach the grip point of the held object on every peer, not only the holder's.
+- [x] Hand pose is **derived** from held-object plus character state, never replicated per frame.
+      Hands are the easiest accidental bandwidth leak in the build. Asserted from both ends:
+      `Nothing_in_the_arms_replicates_anything` counts synchronizers in the arms subtree (proved by
+      adding one and watching it go red), and `Two_peers_arms_reach_the_same_place_from_the_same_facts`
+      shows the pose is a pure function of load and slot — which, with E1-06's proof that the holder
+      map agrees across four processes, is the "on every peer" half.
+
+*`TwoBoneIK3D` exists in 4.7.2 and is the right fit — a shoulder/elbow/hand chain is literally two
+bones. It sits in a family (`FABRIK3D`, `CCDIK3D`, `ChainIK3D`, `JacobianIK3D`, `SplineIK3D`), all
+`SkeletonModifier3D`s, and a modifier only runs as a child of the `Skeleton3D` it drives — parented
+anywhere else it silently does nothing. `CarryArmsTests` asserts that parenting for that reason.*
 
 #### E1-04 · The grab joint, host-side
-**Depends:** E1-01, E1-03, E0-04 · **Test:** L2
+**Depends:** E1-01, E1-03, E0-04 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] The real joint exists **only on the host**. A client never creates a physics joint (Arch §3.3).
-- [ ] `RequestGrab` validates range, current holder and policy lock before resolving.
-- [ ] `GrabResolved` names the winning holder and is `Reliable` — it is a decision, not a stream.
-- [ ] Weight is expressed **only** through Jolt mass and joint compliance — which E1-01 has
+- [x] The real joint exists **only on the host**. A client never creates a physics joint (Arch §3.3).
+- [x] `RequestGrab` validates range, current holder and policy lock before resolving.
+- [x] `GrabResolved` names the winning holder and is `Reliable` — it is a decision, not a stream.
+- [x] Weight is expressed **only** through Jolt mass and joint compliance — which E1-01 has
       now reduced to one mechanism: a `Generic6DofJoint3D` linear spring at stiffness ≈ 100 ×
       mass, damping ≥ 100. **Not a `PinJoint3D`**: Jolt ignores its `impulse_clamp`, and a
-      rigid pin to a kinematic hand carries any mass weightlessly.
+      rigid pin to a kinematic hand carries any mass weightlessly. Asserted on the joint itself,
+      to the number, in `The_grip_is_the_spring_E1_01_measured_and_never_a_pin`.
+
+**The lift had to be made explicit, and E1-01 could not have found this.** A 6DOF linear spring
+drives the offset its two bodies had *at attach time* toward equilibrium — so a spring built while
+the box is on the floor holds it **on the floor**, however stiff it is. The spike measured a box
+already in the air, so its whole finding is about *holding*; lifting is a separate step. The host
+therefore places a fully-crewed load into the carry pose and then builds the grips (`GrabDirector.Crew`).
+
+*That lift is a one-frame snap, and it carries a `ponytail:` naming the ceiling — a visible ~1.9 m
+teleport in the L3 rig — and the upgrade: move the hand to the grip, joint there, animate the hand
+back, and let the spring drag the load up. It is deliberately left for **Gate 0 to judge**, because
+"awkward or broken" is exactly the word E1-10 collects.*
 
 #### E1-05 · Optimistic client attach
-**Depends:** E1-04 · **Test:** L2, confirmed at L3 by E1-06
+**Depends:** E1-04 · **Test:** L2, confirmed at L3 by E1-06 · **Status:** ✅ **Done**
 
-- [ ] Hand animation and a **visual-only** attachment happen on the same frame as the button press,
+- [x] Hand animation and a **visual-only** attachment happen on the same frame as the button press,
       at any latency — including under `LatencyPeer` at 200 ms.
-- [ ] On denial the parcel snaps out of the hands: no error state, no stuck animation, no
+- [x] On denial the parcel snaps out of the hands: no error state, no stuck animation, no
       re-request loop.
-- [ ] A comment states this is **the only optimistic path in the build** and why, citing Arch §3.3,
+- [x] A comment states this is **the only optimistic path in the build** and why, citing Arch §3.3,
       so the next developer does not generalise it to stamping, opening or incinerating — where a
       rollback would un-decide something the report already recorded.
 
-#### E1-06 · Grab contention resolution
-**Depends:** E1-05, E0-09 · **Test:** L3
+**"Visual-only" turned out to be load-bearing, not a turn of phrase.** The first version predicted by
+moving the parcel *body*, which is the property replication owns — so the parcel flipped between the
+predicted hand and the authority's position on every packet, about a metre, several times a second.
+It now offsets a `Carryable.Visual` child instead: the body stays exactly where the host put it,
+nothing contends, and no freeze is needed. `Carryable.Visual` exists for that reason and is never
+replicated.
 
-- [ ] Two clients grabbing the same parcel in the same frame resolve to **exactly one** holder
+**Two smaller corrections, both measured:**
+
+- **The host is asked before the prediction is made.** `Grab` does not block — on a client it posts
+  an RPC and returns — so nothing waits, but predicting *first* moved the load and the host then
+  validated range against the position the prediction had just invented. A grab from across the room
+  passed its own range check.
+- **A loser lets go on `GrabResolved` naming someone else**, not on waiting for its own
+  `GrabRefused`. Earliest honest moment, and it is what stops the flip described above.
+
+#### E1-06 · Grab contention resolution
+**Depends:** E1-05, E0-09 · **Test:** L3 · **Status:** ✅ **Done**
+
+- [x] Two clients grabbing the same parcel in the same frame resolve to **exactly one** holder
       (Arch §10.4).
-- [ ] The loser's client releases cleanly, with no orphaned visual joint.
-- [ ] The loser **sees the parcel move toward the winner** — it does not teleport, and it does not
+- [x] The loser's client releases cleanly, with no orphaned visual joint.
+- [x] The loser **sees the parcel move toward the winner** — it does not teleport, and it does not
       end up inside geometry. The mispredicted case is supposed to read as *a teammate yanked it
-      away*, and that only works if it looks like that.
+      away*, and that only works if it looks like that. The rollback eases over 15 frames
+      (`GrabPredictor.SlipFrames`); measured convergence is **0.018 m** from the host's position and
+      a largest single-frame move of **0.058 m**, against 0.36–1.24 m before the prediction was made
+      visual-only.
+
+*New L3 scenario `contention`, alongside `converge`, `departure` and `hostloss`. The host releases
+all three clients with one replicated signal and each answers whether it won, so the run turns on
+the host's ordering rather than on a timer — the first version used one and the host outlived the
+clients by nothing at all, which read as "nobody won" on a run where somebody plainly had.*
+
+*A client must not simulate a body it does not own. A `RigidBody3D` that is both locally simulated
+and transform-replicated fights itself — position is sent, velocity is not, so a client's copy
+accelerates downward and settles ~0.25 m below the host's. The harness freezes the parcel on
+non-authority peers; **E2-05's replication classes are what answer this properly** (arch §3.4).*
 
 #### E1-07 · Carry and throw
-**Depends:** E1-04 · **Test:** L2
+**Depends:** E1-04 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] Carrying something bulky obstructs vision and movement **through the object's own geometry
-      and mass**, never through an input modifier.
-- [ ] Throw impulse derives from mass, so a heavy parcel is a bad projectile without a special case.
-- [ ] Dropping is always available and never blocked by a state machine. A player who cannot let go
+- [x] Carrying something bulky obstructs vision and movement **through the object's own geometry
+      and mass**, never through an input modifier. Vision: a ray from the head hits the box.
+      Movement: `PlayerCharacter.CarryPull` returns the grip spring's own reaction, so it is zero
+      while the load rests in the hands and grows as the load lags — and the suite asserts `Speed`
+      is untouched, which is the line between this and the modifier arch §6.1 bans. Gravity sag is
+      deliberately not charged as a pull; it would be a permanent downward tug.
+- [x] Throw impulse derives from mass, so a heavy parcel is a bad projectile without a special case.
+- [x] Dropping is always available and never blocked by a state machine. A player who cannot let go
       is a player fighting the input.
 
 *Until E2-05 exists, thrown parcels are ordinary dynamic bodies. Replication-class behaviour
 arrives there, not here.*
 
 #### E1-08 · Two-person cooperative carry
-**Depends:** E1-01, E1-04 · **Test:** L2, later L3
+**Depends:** E1-01, E1-04 · **Test:** L2, later L3 · **Status:** ✅ **Done**
 
-- [ ] An object the domain marks as over one-person capacity **cannot** be lifted by one player and
+- [x] An object the domain marks as over one-person capacity **cannot** be lifted by one player and
       **can** be by two — two host-owned joints on one body (Arch §3.3).
-- [ ] The configuration stays inside E1-01's stable envelope.
-- [ ] When one carrier lets go, the object **drops**. It does not launch, and it does not teleport
+
+**A weaker grip cannot refuse a lift, and that is measured.** The tempting design — give each carrier
+a fraction of the stiffness so one is not enough — does not work: a linear spring's force grows
+without bound with stretch, so halving it only buys more sag. A lone carrier on a two-person 50 kg
+box at half stiffness still lifted it to within 21 cm of their hand. Jolt offers no force cap to fix
+that (`PARAM_LINEAR_SPRING` is stiffness, damping and equilibrium, and E1-01 already found
+`impulse_clamp` unimplemented). **So an under-crewed load is frozen**, and the code says so rather
+than dressing a flag as physics. Each grip stays at E1-01's measured 100 × mass — dividing it would
+also have put the build outside the envelope `JointStabilityTests` guards.
+- [x] The configuration stays inside E1-01's stable envelope.
+- [x] When one carrier lets go, the object **drops**. It does not launch, and it does not teleport
       to the remaining carrier. **E1-01 measured what makes it launch:** grip stiffness. At
       ≈ 100 × mass the release speed is ~1.4 m/s (a drop); in the over-stiff band it reaches
       10 m/s (a launch). If this criterion fails, the grip is too stiff — it is not a bug in
@@ -501,15 +569,22 @@ arrives there, not here.*
 moving it there is a rename, and E2-01 owns it.*
 
 #### E1-09 · Stumble and trip
-**Depends:** E1-07 · **Test:** L2
+**Depends:** E1-07 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] Stumbling is caused by **the world** — uneven floor, a collision, an oversized load — never by
+- [x] Stumbling is caused by **the world** — uneven floor, a collision, an oversized load — never by
       a random timer or an input lockout.
-- [ ] Recovery is immediate and controllable. A stumble that takes control away for a second is
+- [x] Recovery is immediate and controllable. A stumble that takes control away for a second is
       unresponsive input wearing a costume, which is exactly the failure vision §3.1 names.
 
+*The world's shove is **added** to input, never scaling it: `A_stagger_never_costs_the_player_any_authority`
+asserts that a staggered body still reaches full walk speed on the frame it is asked to, and it fails
+if input is multiplied by anything at all. `A_stagger_can_be_steered_against_on_the_very_next_frame`
+covers the other half. There is no timer, no lockout and no flag — `IsImpact` refuses to stagger a
+body that is already spending one, which is what stops it shoving itself into a wall and staggering
+off its own stagger.*
+
 #### E1-10 · **Gate 0 — the feel session**
-**Depends:** E1-07, E1-09, E15-04, E19-02 · **Test:** playtest, not a suite (Arch §10.3)
+**Depends:** E1-07, E1-09, E15-04, E19-02 · **Test:** playtest, not a suite (Arch §10.3) · **Status:** ⛔ **Blocked**
 
 - [ ] One player, local, picks up, carries, throws and drops a heavy awkward box.
 - [ ] Their words are recorded **verbatim**. The finding is which word arrives unprompted:
@@ -517,6 +592,16 @@ moving it there is a rename, and E2-01 owns it.*
 - [ ] A written go/no-go, filed in E19-06's register.
 - [ ] **On a fail, E1 is fixed before any other feature work starts** (epics gate table). A pass
       here does not authorise Gate 1's scope.
+
+**Every E1 story it depends on is done; the gate itself cannot be coded.** It needs a person who has
+not seen the game, and its two remaining dependencies are outside E1: **E15-04** (look sensitivity,
+invert-Y and FOV — a participant who cannot set their own sensitivity is testing your mouse, not
+your grab feel) and **E19-01 → E19-02** (the protocol, and an instrument that names in advance what
+a fail looks like, so the result is not renegotiated afterwards).
+
+**Two things are already waiting for its verdict**, and both are recorded rather than pre-empted:
+the one-frame grab snap (E1-04's `ponytail:`), and whether a stumble should be more than a shove.
+Deciding either before the session would be deciding it without the only evidence that counts.
 
 ---
 
@@ -1132,23 +1217,28 @@ one whose blocker is a machine rather than a dependency.
 Read off the dependency graph, not off preference. Everything here has its dependencies met
 **today**.
 
-**On the Gate 0 critical path** — this is the ordering that matters:
+**To reach Gate 0** — this is now the whole critical path, and none of it is gameplay code:
 
 | Story | Why it is next |
 | :-- | :-- |
-| **E1-03** Hands and IK | The only thing standing between E1-02 and the grab joint. Use Godot 4.7's `TwoBoneIK3D` / `FABRIK3D` **before** writing procedural arm code (`AGENTS.md` rung 3) |
-| **E1-04** The grab joint, host-side | E1-01 already chose the mechanism for you: a `Generic6DofJoint3D` linear spring at stiffness ≈ 100 × mass, **not** a `PinJoint3D` |
-| **E1-07** Carry and throw, then **E1-09** Stumble and trip | The last two feature stories Gate 0 needs |
-| **E15-04** Minimum settings | Needed *before* Gate 0, not after. Runs in parallel with all of the above |
-| **E19-01 → E19-02** Protocol, then Gate 0 instrument | No code. Both must exist before the session, and E19-01 blocks nothing else |
+| **E15-04** Minimum settings | Look sensitivity, invert-Y and FOV, persisted, in `SettingsService` (one of the four permitted autoloads — **no fifth**, arch §6.2). Small, and it gates the gate |
+| **E19-01** The facilitation protocol | No code. What the facilitator says and, more importantly, **must not** say — leading a participant toward the word "awkward" invalidates Gate 0 entirely |
+| **E19-02** Gate 0 instrument | Records **verbatim words**, not scores, and names in advance what a fail looks like so the result cannot be renegotiated afterwards |
+| **E1-10** Gate 0 itself | One player, local, a heavy awkward box. Then a written go/no-go in E19-06's register |
 
-**Unblocked and off the critical path**, worth picking up alongside:
+**Unblocked and off that path**, worth picking up alongside:
 
 - **E2-01** `ParcelId`, `ParcelRecord`, `ParcelRegistry` — pure L1, needs only E14-04, and it is
-  the gate on all of E2, most of E3, and E13-01. The largest amount of downstream work unlocked
-  by one story in the whole document.
+  the gate on all of E2, most of E3, and E13-01. The largest amount of downstream work unlocked by
+  one story in the whole document. It also retires two `ponytail:` comments already written against
+  it: `GrabDirector` addresses loads by scene path, and `Carryable` holds capacity and the policy
+  lock as `[Export]` fields.
+- **E2-05** Replication classes — E1-06 ran into exactly what it exists for: a client that both
+  simulates and receives a body fights itself. The L3 harness freezes parcels on non-authority
+  peers to work around it, and that workaround is a note in this document rather than a design.
 - **E14-07's red run** — one scratch branch, one bad assert, one delete. Closes the last E14 box.
-- **E17-01** The asset specification — no dependencies beyond the scaffold.
+- **E17-01** The asset specification — no dependencies beyond the scaffold, and E1-03's hands have
+  nothing to show until placeholders exist.
 - **E12-01** Lobby — needs only E0-04, and Gate 1 needs it.
 - **E18-01 / E18-02** Export verification — unblocked, but **install the 4.7.2-stable-mono export
   templates first**; the machine has 4.6 templates and this story fails until that is fixed. It is

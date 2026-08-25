@@ -103,6 +103,11 @@ README, not in a rule** — each machine records its own (epics E14).
   written against, and there is nowhere else that documents it. Definition of Done requires it.
 - **Formatting is `.editorconfig`'s job, not review's.** If a formatting question reaches a
   human, the `.editorconfig` is missing a rule. Fix the file, not the PR.
+- **`dotnet format --verify-no-changes` gates CI, and its autofix is not always right.** IDE0031
+  ("null check can be simplified") on `if (x is not null) { x.Prop = v; }` fixes to
+  `x?.Prop = v`, **which does not compile** — a property cannot be assigned through a
+  null-conditional. Rewrite as a guard clause instead; the analyser accepts it and the code
+  builds. Run the build after `dotnet format`, not just the formatter. (E1-07)
 - **`using Godot;` shadows BCL type names, and the compiler reports it as your mistake.**
   `Environment` is the one that bites first — `Godot.Environment` is the 3D world environment
   resource, so bare `Environment.Version` is `CS0104: ambiguous reference`. Spell out

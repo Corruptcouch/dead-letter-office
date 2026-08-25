@@ -161,6 +161,35 @@ public class CarryArmsTests
         }
     }
 
+    [TestCase]
+    public void Two_peers_arms_reach_the_same_place_from_the_same_facts()
+    {
+        var (root, arms, load) = Rig();
+
+        try
+        {
+            // A second set of arms standing somewhere else entirely, as a second peer's copy of the
+            // holder would be.
+            var other = new CarryArms { Name = "Arms2", Position = new Vector3(9, 3, -7) };
+            root.AddChild(other);
+
+            arms.Reach(load, 0);
+            other.Reach(load, 0);
+
+            // E1-03's "on every peer, not only the holder's", as an assertion rather than an
+            // inference. Hand pose is DERIVED from the load and the slot, so two peers holding the
+            // same two facts must land in the same place - and the holder map they read the slot
+            // from is proved identical across four processes by E1-06's contention run. Any local
+            // state creeping into the pose (the owning body, a camera, the peer id) breaks this.
+            AssertFloat(arms.LeftTarget.DistanceTo(other.LeftTarget)).IsLess(0.0001f);
+            AssertFloat(arms.RightTarget.DistanceTo(other.RightTarget)).IsLess(0.0001f);
+        }
+        finally
+        {
+            Drop(root);
+        }
+    }
+
     private static int Synchronizers(Node node)
     {
         var found = node is MultiplayerSynchronizer ? 1 : 0;

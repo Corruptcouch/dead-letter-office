@@ -15,14 +15,11 @@ namespace Dlo.Game.Carry;
 /// prediction is wrong the rollback does not read as jank — it reads as a teammate yanking the box
 /// away half a second before you got it, which is vision §3.5's comedy engine firing for free.
 /// <para>
-/// <b>Do not generalise it.</b> Stamping, opening and incinerating are decisions the report has
-/// already recorded, so rolling one back would un-decide something a player has been blamed for.
-/// Those wait for the host, and E2-07 and E3-03 say so in their own criteria.
-/// </para>
-/// <para>
-/// <b>No physics joint is ever created here.</b> The real joint lives only on the host; this moves
-/// a visual and nothing else, which is what keeps a mispredicted grab from leaving a client with a
-/// constraint the host has never heard of.
+/// <b>Do not generalise it, and do not let it touch physics.</b> Stamping, opening and incinerating
+/// are decisions the report has already recorded, so rolling one back would un-decide something a
+/// player has been blamed for — they wait for the host, and E2-07 and E3-03 say so in their own
+/// criteria. Nothing here creates a joint either: the real one lives only on the host, so a
+/// mispredicted grab cannot leave a client holding a constraint the host never heard of.
 /// </para>
 /// </remarks>
 public partial class GrabPredictor : Node
