@@ -1,0 +1,10 @@
+# Which chute each destination goes down (E13-03).
+# destination,chute - and every destination appears exactly once, or the content set is rejected.
+# The routing chart on the far wall renders this (vision 8).
+NORTHGATE-4,1
+NORTHGATE-9,1
+SOUTHGATE-2,2
+SOUTHGATE-11,2
+EASTMARCH-1,3
+WESTHOLM-6,4
+DEADLETTER-0,5

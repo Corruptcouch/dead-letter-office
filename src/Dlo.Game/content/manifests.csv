@@ -1,0 +1,12 @@
+# The paperwork a shift draws on (E13-02, E2-03).
+# address,weight,fragility,contents
+# Every address parses, and every destination is one routing.csv routes - checked at load, so a
+# parcel that cannot be routed is a content error rather than a mid-shift surprise.
+NORTHGATE-4-118,2.5,10,STATIONERY
+NORTHGATE-4-1204,14.0,15,LEDGERS
+NORTHGATE-9-7,0.8,200,GLASSWARE
+SOUTHGATE-2-45,31.5,40,MACHINE_PARTS
+SOUTHGATE-11-903,6.25,120,PERISHABLE
+EASTMARCH-1-2,48.0,25,MACHINE_PARTS
+WESTHOLM-6-88,1.2,90,GLASSWARE
+DEADLETTER-0-1,3.0,60,UNMARKED

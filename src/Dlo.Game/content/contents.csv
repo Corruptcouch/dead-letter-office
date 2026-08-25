@@ -1,0 +1,9 @@
+# Contents codes a manifest or an archetype may declare (E13-01).
+# One code per row: upper case, 2-24 of A-Z, 0-9 and underscore.
+# A declaration is only ever a claim - what is actually in the box is E2-08's.
+STATIONERY
+LEDGERS
+GLASSWARE
+MACHINE_PARTS
+PERISHABLE
+UNMARKED

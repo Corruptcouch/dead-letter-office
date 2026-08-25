@@ -90,6 +90,14 @@ command.
 | **L2** | GdUnit4, in engine | `dotnet test tests/Dlo.Game.Tests` | seconds |
 | **L3** | Four headless peers, real socket | `dotnet test tests/Dlo.Net.Tests` | **< 30 s** |
 | **both** | L1 + L2 together | `dotnet test dlo.sln` | — |
+| **content** | Authored `.tres` and tables | `dotnet run --project tools/Dlo.ContentTool -- validate` | **< 1 s** |
+
+`validate` is not a test level — it is the content gate (E13-05, arch §7). It reads
+`src/Dlo.Game/content/` and exits non-zero naming the file, the line and the invariant a
+content file broke. CI runs it on every push, ahead of the Godot install, so a typo in a
+routing table reports in seconds rather than after a 100 MB download. The same load runs inside
+L1 against the real files, so a broken content file also reddens the suite for whoever forgot
+to run the tool.
 
 L2, L3 and `dotnet test dlo.sln` need `GODOT_BIN` set. L1 does not — it never starts an engine,
 which is the entire point of the Domain boundary. L2 also runs from an IDE test explorer, with

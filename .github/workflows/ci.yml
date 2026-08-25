@@ -1,9 +1,9 @@
 # E14-07. Every push: restore, build, format, L1, the architecture test, L2.
 # On merge to main, additionally: L3 (E0-09), as a second job.
 #
-# Not here yet, deliberately:
-#   - `ContentTool validate` arrives with E13-06, which is the story that makes a broken
-#     content file fail the build.
+# `ContentTool validate` runs below as of E13-05. That does not close E13-06: its criterion is
+# that a broken content file has been PUSHED and watched to fail the build, and nobody has done
+# that yet - the same debt E14-07 carries, for the same reason.
 #
 # GREEN on ubuntu-latest as of 2026-08-24, after one red run and one fix. What that run
 # settled, and what it did not, is recorded at the bottom of this file - it is worth reading
@@ -62,6 +62,13 @@ jobs:
         # inside another suite's output. Standards §8: the architecture test is not decoration,
         # and when it fails the fix is never to relax it.
         run: dotnet test tests/Dlo.Domain.Tests --no-build --filter "FullyQualifiedName~ArchitectureTests"
+
+      - name: Validate authored content
+        # E13-05, and arch §7's "a content file that breaks an invariant fails the build" - the
+        # only mechanism that keeps a data pipeline honest once people are authoring under
+        # deadline. Before the Godot install, because a content typo should report in seconds
+        # rather than after a 100 MB download.
+        run: dotnet run --project tools/Dlo.ContentTool --no-build -- validate
 
       - name: Install Godot ${{ env.GODOT_VERSION }}
         run: |

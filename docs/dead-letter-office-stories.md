@@ -30,20 +30,24 @@ marked as such instead of being rounded up.
 | **E14** Foundation | **8 done**, 1 partial | Complete bar E14-07's deliberate-failure run |
 | **E0** Netcode spine | **8 done**, 2 blocked | Spine is in and L3-proven. Steam is the only hole |
 | **E1** Embodiment | **9 done**, 1 blocked | Feature work complete. **Only Gate 0 itself is left** |
-| **E2 · E3 · E4** Tier 1 | **4 done** of 30 | E2's spine is in: identity, spawn args, pooling. The rest of E2 waits on **E13-02** and **E4-01**, in other epics |
-| **Alongside** E12·13·15·17·18·19 | 0 of 29 | Not started. **E15-04 and E19-01/02 now block Gate 0** |
+| **E2 · E3 · E4** Tier 1 | **5 done** of 30 | All of E2 that no other epic blocks. What is left needs **E4-01**, or is post-MVP |
+| **Alongside** E12·13·15·17·18·19 | **3 done**, 2 partial of 29 | E13's spine is in and validated in CI. **E15-04 and E19-01/02 still block Gate 0** |
 
-**29 of 88 decomposed stories are done.** Suite: **L1 25 · L2 91 · L3 41**, all green,
-`dotnet format` clean. (L2 was recorded as 77 here and measured 78 before E2 added to it; the
-suite was never short, the tally was.)
+**33 of 88 decomposed stories are done.** Suite: **L1 66 · L2 91 · L3 41**, all green,
+`dotnet format` clean, and `ContentTool validate` green on the authored content.
 
-The three that fall short, all named rather than rounded up:
+The five that fall short, all named rather than rounded up:
 
 - **E1-10 — Gate 0.** Every E1 story under it is done, but the gate is a playtest: it needs a
   person who has not seen the game, plus **E15-04** and **E19-01 → E19-02**. It is now the single
   thing standing between this project and its first real verdict.
 - **E14-07** — CI runs everything it should and is green, but nobody has watched it go **red**.
   A pipeline never seen to fail is not known to work as a gate.
+- **E13-01** — archetypes load, validate and are addressable; an unknown id is inert and an L1
+  test proves it. **Logged is owed**, and cannot be paid until something looks one up: Domain has
+  no output, so the log line belongs to **E4-01**, the first caller.
+- **E13-06** — the CI step is wired in and the validator exits non-zero on a broken file locally,
+  but nobody has watched CI go red for content either. **Same push closes this and E14-07.**
 - **E0-01 / E0-03** — the Steam path. Blocked on Steam accounts on separate machines, not on any
   decision. The seam around it is finished, so nothing else waits on it.
 
@@ -648,15 +652,20 @@ Deciding either before the session would be deciding it without the only evidenc
       passing for the wrong reason forever.
 
 #### E2-03 · The manifest model
-**Depends:** E2-01, E13-02 · **Test:** L1
+**Depends:** E2-01, E13-02 · **Test:** L1 · **Status:** ✅ **Done**
 
 Manifest, address, destination code, weight, fragility, declared contents.
 
-- [ ] Every field is a Domain type, and the whole model serialises to a payload **containing no
-      engine type** (Standards §9).
-- [ ] An address either parses to a routable destination or is **rejected at content load**
+- [x] Every field is a Domain type, and the whole model serialises to a payload **containing no
+      engine type** (Standards §9). Asserted structurally rather than promised: a test walks
+      `Manifest`'s properties and fails on any type that is neither a primitive nor from
+      `Dlo.Domain`. The architecture test guards the assembly; this guards the shape.
+- [x] An address either parses to a routable destination or is **rejected at content load**
       (E13-02's grammar) — never discovered at routing time, mid-shift.
-- [ ] Variation is data. Adding an archetype does not add a class (Arch §4.1).
+- [x] Variation is data. Adding an archetype does not add a class (Arch §4.1). `Archetype`,
+      `Size` and `Condition` are bytes from spawn args and `DeclaredContents` is an authored code,
+      so a new kind of parcel is a new `.tres`. **`Destination` is derived from the address**
+      rather than stored beside it, because two copies are two things to keep in step.
 
 #### E2-04 · Spawn args and the custom spawn function
 **Depends:** E2-01, E0-05 · **Test:** L2 + L3 negative · **Status:** ✅ **Done**
@@ -1005,26 +1014,48 @@ answered
 MVP line actually consumes; the mutation, PA-line and hazard schemas arrive with E9, E7 and E6.*
 
 #### E13-01 · Parcel archetype `.tres` schema
-**Depends:** E2-01 · **Test:** L1 via `ContentTool`
+**Depends:** E2-01 · **Test:** L1 via `ContentTool` · **Status:** 🔶 **Partial**
 
-- [ ] A new parcel archetype ships **with no code change** — proved by adding one in the same PR.
-- [ ] Mass and size are sanity-checked; declared contents resolve.
-- [ ] An unknown id makes the thing **inert and logged, not fatal** (Standards §9). Content data
-      outlives the table that described it.
+- [x] A new parcel archetype ships **with no code change** — proved by adding one in the same PR.
+      Five shipped in this one: `envelope`, `ledger_box`, `glassware_crate`, `machine_pallet`,
+      `unmarked_carton`, each a `.tres` under `src/Dlo.Game/content/archetypes/` and none of them
+      named anywhere in code. `ParcelArchetypeResource` is the authoring face; `ParcelArchetype`
+      is the checked one.
+- [x] Mass and size are sanity-checked; declared contents resolve. Mass against
+      `ParcelArchetype.MinMass`/`MaxMass` — the upper bound is E1-01's stability envelope, so an
+      archetype authored past it fails here rather than as jitter in a playtest — size against
+      `MaxSize`, and declared contents against the contents table.
+- [ ] An unknown id makes the thing **inert and logged, not fatal** (Standards §9).
+      **Half done:** `ContentSet.FindArchetype` returns null for an id nobody authored and an L1
+      test proves it, so inert is real. **Logged is owed** and cannot be paid here — Domain has no
+      output (Standards §0), so the log line belongs to the first caller, and there is none until
+      **E4-01** spawns parcels. `FindArchetype`'s own doc comment says so.
 
 #### E13-02 · Manifest and address grammar
-**Depends:** E13-01 · **Test:** L1
+**Depends:** E13-01 · **Test:** L1 · **Status:** ✅ **Done**
 
-- [ ] Every authored address parses to a routable destination, checked at load.
-- [ ] The grammar is **one schema, not two shapes with a fallback bridging them** (Standards §9).
-      That mistake is permanent: every reader afterwards has to handle both, forever.
+- [x] Every authored address parses to a routable destination, checked at load. Both halves are
+      checked: the grammar, and that the destination is one `routing.csv` actually routes. A row
+      naming a destination in no route names the file and the line, rather than surfacing at the
+      chart mid-shift where nothing points back to it.
+- [x] The grammar is **one schema, not two shapes with a fallback bridging them** (Standards §9).
+      One `Pattern`, one parser. **A destination is read through the address grammar rather than
+      beside it** — `Address.IsDestination` probes with a unit number and keeps the routable half,
+      so there is no second pattern that can drift from the first. A test asserts a destination
+      fails for exactly the reasons a full address does.
 
 #### E13-03 · Routing policy schema
-**Depends:** E13-02 · **Test:** L1
+**Depends:** E13-02 · **Test:** L1 · **Status:** ✅ **Done**
 
-- [ ] Every destination maps to **exactly one** chute; a policy that breaks this fails the build
-      rather than producing an unroutable shift.
-- [ ] A policy change is a data edit, because E3-08 needs the PA to make one mid-shift.
+- [x] Every destination maps to **exactly one** chute; a policy that breaks this fails the build
+      rather than producing an unroutable shift. Duplicates are rejected rather than last-one-wins,
+      which is what would otherwise leave the chart on the wall and the scoring at the whistle
+      disagreeing in silence. Blocks are canonicalised first, so `NORTHGATE-4` and `NORTHGATE-04`
+      collide instead of both loading. Proved locally: a duplicated route exits `ContentTool`
+      non-zero; **watching CI itself go red is E13-06's, and still owed.**
+- [x] A policy change is a data edit, because E3-08 needs the PA to make one mid-shift. The policy
+      is `content/routing.csv` and the loader is the only reader. **Mid-shift mutation is not this
+      story** — that is E3-05's `PolicyState`, which this schema is the authored input to.
 
 #### E13-04 · Signage table
 **Depends:** E13-02 · **Test:** L1
@@ -1033,19 +1064,27 @@ MVP line actually consumes; the mutation, PA-line and hazard schemas arrive with
 - [ ] Carries the colour and shape fields E15-03 needs.
 
 #### E13-05 · `ContentTool validate`
-**Depends:** E13-01 · **Test:** L1
+**Depends:** E13-01 · **Test:** L1 · **Status:** ✅ **Done**
 
-- [ ] A deliberately broken content file fails validation with a message naming **the file and the
-      invariant**. A validator whose output is `Invalid` teaches nobody anything at 11pm.
-- [ ] Validation runs in seconds. A slow validator is a skipped validator.
-- [ ] **Every new content type ships its validation rule in the same PR** (Standards §9). That rule
-      is the only thing stopping this epic from rotting quietly.
+- [x] A deliberately broken content file fails validation with a message naming **the file and the
+      invariant**. Run against five deliberate breakages at once — a bad contents code, a duplicated
+      route, an over-mass archetype, a typo'd contents reference and an unroutable address — and
+      each named its file, its line where it has one, the rule as a **rule** rather than as its
+      violation, and what was found instead. Exit code 1.
+- [x] Validation runs in seconds. It runs in well under one: the whole set is five `.tres` and
+      three tables, and Domain does no I/O.
+- [x] **Every new content type ships its validation rule in the same PR** (Standards §9). All four
+      introduced here — archetypes, contents, manifests, routes — arrived with theirs.
 
 #### E13-06 · `ContentTool validate` in CI
-**Depends:** E13-05, E14-07 · **Test:** build only
+**Depends:** E13-05, E14-07 · **Test:** build only · **Status:** 🔶 **Partial**
 
 - [ ] A broken content file **fails the build** — proved by pushing one and watching CI go red
       (Arch §7). This is the only mechanism that keeps a pipeline honest under deadline.
+      **The step is wired in** and runs ahead of the Godot install, so a content typo reports in
+      seconds rather than after a 100 MB download. **The proof is owed**, and it is the same debt
+      E14-07 carries: one scratch branch, one broken row, one delete. Doing both in one push
+      closes both.
 
 #### E13-07 · Authoring guide, first pass
 **Depends:** E13-05 · **Test:** none
@@ -1253,14 +1292,14 @@ Read off the dependency graph, not off preference. Everything here has its depen
 
 **Unblocked and off that path**, worth picking up alongside:
 
-- **E13-02** The manifest and address grammar — now the single thing standing between E2 and
-  being finished. **E2-03** is the only unbuilt story in E2 that no other epic blocks, and it waits
-  on this grammar; E13-02 in turn needs only E13-01. Two small content stories unlock the parcel's
-  whole data half.
-- **E4-01** Conveyors and rails — blocks **E2-05**, and through it E2-09 and E2-10. It is also the
-  first story that pools a parcel into a live shift, which is what makes `GrabDirector`'s
-  scene-path addressing a real bug rather than a latent one; that `ponytail:` names E4-01 as the
-  line it must not cross.
+- **E4-01** Conveyors and rails — the biggest unlock left on this side. It blocks **E2-05**, and
+  through it E2-09 and E2-10; it is where E13-01's missing log line goes; and it is the first
+  story that pools a parcel into a live shift, which is what turns `GrabDirector`'s scene-path
+  addressing from a latent bug into a real one. That `ponytail:` names E4-01 as the line it must
+  not cross.
+- **E13-04** Signage table — needs only E13-02, which is done, and it is the smallest story left
+  in E13. **E13-07**, the authoring guide, needs only E13-05 and is the epic's actual thesis
+  (vision §13): it is allowed to be bad, it is not allowed to be missing.
 - **E2-05** Replication classes — E1-06 ran into exactly what it exists for: a client that both
   simulates and receives a body fights itself. The L3 harness freezes parcels on non-authority
   peers to work around it, and that workaround is a note in this document rather than a design.
@@ -1281,7 +1320,7 @@ anything in Tier 2 — Gate 1 can still invalidate it, which is rung 1 of `AGENT
 
 The epics document asks that a question a story cannot answer from its epic's **Decisions already
 made** be recorded and answered **once, at the epic level**. Decomposing the MVP line surfaced
-seven. Four are genuinely open; three are duplications or inconsistencies that need a ruling rather
+seven, and building E13 added two more. Four are genuinely open; three are duplications or inconsistencies that need a ruling rather
 than a decision.
 
 | # | Gap | Blocks | Suggested owner |
@@ -1293,6 +1332,15 @@ than a decision.
 | 5 | **Host-loss teardown is listed in two epics.** It is a story in E0 *and* in E12. Split here as E0-10 (session ends cleanly, asserted at L3) and E12-05 (the player-facing message and return to lobby). Confirm or merge | E0-10, E12-05 | Tech |
 | 6 | **Scanner and chart appear in both E3 and E15.** Split here as E3 owning the mechanism and E15 owning the surface. E15's header also says Tier 2 while the dependency diagram says it runs from Tier 1 — the diagram is right, since E3 cannot be played without a readable chart | E3-02, E3-05, E15-01, E15-02 | Tech |
 | 7 | **Gate 2 needs Gate 1's kit.** Gate 2 lives in E3 (Tier 1), but it needs four players and a lobby, which is Gate 1's line. Sequence is presumably Gate 1 → Gate 2 in the same window; worth stating, because "Gate 2 lives in E3" reads as though it comes first | E3-09, E19-05 | Owner |
+| 8 | **Arch §7 says the routing policy is a `.tres`, and it was built as a data table.** Two rules collide: `ContentTool` may reference Domain and nothing else (arch §1.3), and Domain may not reference Godot (arch §2) — so the validator reads `.tres` as text. That is fine for archetypes, which are flat scalars in one file each. A routing policy is a two-column mapping, and its `.tres` form is a multi-line Godot dictionary whose diffs are worse than a table's — which defeats the stated reason `.tres` is kept out of LFS at all. **Built as `content/routing.csv`; needs ratifying or reverting** | E13-03, E3-04 | Tech |
+| 9 | **The contents table is a content type arch §7 does not list.** E13-01 requires that "declared contents resolve", and nothing to resolve them against existed. Added as `content/contents.csv`, so an archetype naming contents nobody declared is a build failure rather than a box that says nothing. It wants a row in arch §7's table, or a ruling that declared contents should have been free text | E13-01, E2-03, E2-08 | Tech |
+
+**Gaps 8 and 9 are open by construction, not by oversight.** Both were forced by building E13
+and both are recorded rather than decided privately, which is what the epics document asks for.
+The content set ships as authored either way — `ContentTool validate` is green on it, and the
+L1 suite loads the real files — so ratifying gap 8 costs nothing and reverting it costs one
+reader. **Reverting is the expensive direction if it is left late**, because every routing file
+authored between now and then is written in the shape that would change.
 
 **Gap 1 is settled — the owning peer owns the character transform.** Ruled 2026-08-25, and it
 is the reading this table already assumed. Each character body gets
