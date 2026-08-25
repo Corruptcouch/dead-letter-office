@@ -52,7 +52,8 @@ that stops being true.
 
 ### 3. Point the tests at Godot
 
-The engine suite launches a real editor process, so it needs to know where the editor is:
+The L2 and L3 suites both launch real Godot processes, so they need to know where the editor
+is:
 
     # Windows (bash / Git Bash)
     export GODOT_BIN="D:/work/Godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
@@ -69,11 +70,11 @@ test runner's output goes nowhere, which reads as a hang.
 Like the editor path itself this is machine-local, which is why it is an environment variable
 and not a committed `.runsettings`.
 
-### 4. Run both suites
+### 4. Run the suites
 
     dotnet test dlo.sln
 
-Expect **7 passing tests** across two suites in 15–20 seconds. That is the whole check.
+Expect **31 passing tests** across three suites in 15–20 seconds. That is the whole check.
 
 ---
 
@@ -87,10 +88,10 @@ command.
 | :-- | :-- | :-- | :-- |
 | **L1** | Domain, no engine | `dotnet test tests/Dlo.Domain.Tests` | **< 5 s** |
 | **L2** | GdUnit4, in engine | `dotnet test tests/Dlo.Game.Tests` | seconds |
-| **L3** | Headless host + 3 clients | *arrives with E0-09* | minutes |
+| **L3** | Four headless peers, real socket | `dotnet test tests/Dlo.Net.Tests` | **< 30 s** |
 | **both** | L1 + L2 together | `dotnet test dlo.sln` | — |
 
-L2 and `dotnet test dlo.sln` need `GODOT_BIN` set. L1 does not — it never starts an engine,
+L2, L3 and `dotnet test dlo.sln` need `GODOT_BIN` set. L1 does not — it never starts an engine,
 which is the entire point of the Domain boundary. L2 also runs from an IDE test explorer, with
 breakpoints — see [Running L2 from the editor](#running-l2-from-the-editor).
 
@@ -152,6 +153,33 @@ for you:
 *(GdUnit4 also ships a panel that runs inside the **Godot** editor, which needs its addon
 installed under `tests/Dlo.Game.Tests/addons/`. That is not installed here and nothing needs
 it; the test explorer covers the same ground without adding a tracked dependency.)*
+
+### L3 — four headless peers
+
+`dotnet test tests/Dlo.Net.Tests` boots **four separate Godot processes** — one host, three
+clients — over ENet on `127.0.0.1:27377`, and asserts that an intent RPC arrives and a
+replicated value converges on all three clients.
+
+**Four processes and not four `SceneTree`s** is E0-08's finding, and it is not about speed: in
+one process all four peers share one physics world, one CLR and one set of autoloads, which
+would make every physics-bearing L3 assertion a lie. The measurements behind that are on
+`FourPeerSession`.
+
+- **It costs about 0.6 s**, against arch §10.1's "minutes" budget. There is no reason to avoid
+  running it.
+- **CI runs it on merge to main only**, as a separate job (arch §10.6). Not because it is
+  slow, but because a network suite is the one most likely to go flaky on a shared runner.
+- **It fails, loudly, when `GODOT_BIN` is unset.** It does not skip. An L3 suite that skips
+  itself reports green, which is worse than not having one.
+- **A failure prints every peer's position** — exit code, connection id, what it held, how
+  many attempts it took. That transcript is the point of the harness; read it before doing
+  anything else.
+- **It needs a Debug build.** Godot loads a project's C# from `.godot/mono/temp/bin/Debug`
+  whatever configuration you built in, so `dotnet test -c Release` here fails with a message
+  telling you so rather than with four timeouts.
+- **The peers run `tests/Dlo.Net.Tests` as their Godot project**, not `src/Dlo.Game`, so no
+  harness-only code ships. The ceiling is the same one L2 has: `SessionRoot` is built as an
+  ordinary node, so its registration as an autoload is not covered.
 
 ---
 

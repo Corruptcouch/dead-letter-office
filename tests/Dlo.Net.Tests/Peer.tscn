@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+; Hand-written, and deliberately without the `uid=` the editor would add: nothing here is ever
+; opened in the editor, and a uid nobody generated is a uid nobody can keep in step. Godot
+; resolves the script by path.
+
+[ext_resource type="Script" path="res://Peer.cs" id="1_peer"]
+
+[node name="Peer" type="Node"]
+script = ExtResource("1_peer")

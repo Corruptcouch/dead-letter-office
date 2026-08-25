@@ -1,5 +1,32 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Godot.NET.Sdk/4.7.2">
 
-  <!-- The L3 harness and its ProjectReference to Dlo.Game arrive with E0-09. -->
+  <!--
+    Both halves of L3 live in this one project, and that is the lazy option working out
+    (AGENTS.md rung 1): the xUnit harness and the peer it launches share an assembly, so
+    the sentinel value and the report format are compile-time constants on both sides
+    rather than two string literals that have to be kept in step.
+
+    Godot.NET.Sdk rather than Microsoft.NET.Sdk because the harness launches Godot at
+    this directory with a headless path switch, and Godot needs it to be a Godot project. Same shape as tests/Dlo.Game.Tests.
+  -->
+
+  <PropertyGroup>
+    <!-- Explicit net10.0 because this is a Godot project: Godot re-adds a MISSING
+         TargetFramework line as net8.0, and the project body beats Directory.Build.props
+         (arch §1.4, E14-05). Do not tidy it away. -->
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Versions match tests/Dlo.Domain.Tests. global.json pins the SDK, so these are the
+         versions every machine and CI already agree on. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Dlo.Game/Dlo.Game.csproj" />
+  </ItemGroup>
 
 </Project>

@@ -1,0 +1,23 @@
+; L3 harness project (E0-09).
+;
+; This directory is a Godot project for the same mechanical reason tests/Dlo.Game.Tests is
+; one: the L3 suite launches `godot --headless --path .` four times, and Godot needs a
+; project.godot and a main scene to launch at all. The peers run THIS project, not
+; src/Dlo.Game - see Peer.cs for what that buys and what it costs.
+
+config_version=5
+
+[application]
+
+config/name="Dlo.Net.Tests"
+run/main_scene="res://Peer.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[dotnet]
+
+project/assembly_name="Dlo.Net.Tests"
+project/solution_directory="../.."
+
+[physics]
+
+3d/physics_engine="Jolt Physics"

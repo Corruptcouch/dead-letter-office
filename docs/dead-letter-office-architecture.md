@@ -856,7 +856,7 @@ runs on merge to main, not per-push, because it is minutes rather than seconds.
 
 ## 11. Open technical items
 
-Ordered by when the answer is needed, not by size. **All five remaining items are empirical —
+Ordered by when the answer is needed, not by size. **All four remaining items are empirical —
 they are answered by measurement or a spike, not by a decision.**
 
 | # | Item | Blocks | Needed by |
@@ -864,8 +864,10 @@ they are answered by measurement or a spike, not by a decision.**
 | 1 | **Prove the GodotSteam C# path** — bindings fork, `SteamMultiplayerPeer` without channels, at 4 peers (§3.5). **Blast radius reduced:** E7 no longer depends on this | E12, shipping | **E0, week one.** Not negotiable |
 | 2 | Measure real replication cost against §8's budget with a full belt | §3.4's three-class design | Before E4 conveyors are considered done |
 | 3 | Jolt joint stability for two-person carry of a heavy body | E1 | First E1 spike |
-| 4 | Godot headless multi-peer harness feasibility in CI (4 processes or 4 `SceneTree`s?) | §10.4, L3 | With E0 |
 | 5 | Select the pure-C# Opus package — managed only, no native binary, all three desktop targets (§6.5) | E7 | With E7's first story |
+
+*Item 4 — the headless multi-peer harness — is answered and has moved to the table below. The
+remaining numbers are left where they are, because the stories document cites them by number.*
 
 **Resolved in v0.2** — kept visible so the reasoning is not re-litigated:
 
@@ -876,6 +878,7 @@ they are answered by measurement or a spike, not by a decision.**
 | `CulpabilityWindow` per event kind | **No window.** Culpability never expires (§4.6) |
 | Shift length | **8–12 min × 3–6 shifts**, provisional, curve is a data file, Gate 2 refines |
 | Target framework, now that the .NET 10 SDK is installed | **`net10.0` everywhere, overriding the `net8.0` Godot generates.** Measured, not assumed: it builds, Godot's own build path builds it, the editor leaves an already-set value alone, and it runs. The runtime is `.NET 10` at either TFM, so `net8.0` would only mean compiling against an older BCL than the one executing — and one that leaves support in November 2026 (§1.4). **Held in `Directory.Build.props` for five projects and in `Dlo.Game.csproj` for the sixth**, because Godot re-adds a missing TFM line and the project body beats the props file (§1.4, E14-03). Export is the one leg still unverified, and E18-01 verifies it |
+| Godot headless multi-peer harness: 4 processes or 4 `SceneTree`s? (was item 4) | **Four processes**, built and measured 2026-08-24 (E0-08, E0-09). Cost is not what decides it: a trivial four-peer connect-and-exchange took **435 ms** in one process against **663 ms** in four, both far inside §10.1's "minutes". What decides it is that **one Godot process has exactly one physics world** — two bodies in two sibling subtrees shoved each other apart, measured — so four in-process peers would hold four copies of every parcel in one simulation. §10.4's physics-bearing assertions (grab contention, identity through tube transit, ledger agreement) would all have been quietly wrong. Statics, autoloads and `ProjectSettings` are shared for the same reason, and host authority is a claim about separate machines. The harness lives in `tests/Dlo.Net.Tests`, which is its own Godot project so that no harness-only code ships; the whole finding is on `FourPeerSession` |
 | Does `Dlo.Domain` stay on `netstandard2.1`? | **No — `net10.0`, same as everything else.** It had no consumer outside this repo, and it was what forced the `IsExternalInit` declaration for `readonly record struct`. That workaround is deleted rather than documented |
 
 ---
