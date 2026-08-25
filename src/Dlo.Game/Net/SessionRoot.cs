@@ -26,6 +26,7 @@ public partial class SessionRoot : Node
 {
     private IGameTransport? _transport;
     private HostSession? _hostSession;
+    private Carry.GrabDirector? _grabs;
 
     /// <summary>
     /// The transport used for the next <see cref="Host"/> or <see cref="Join"/>. Resolved from
@@ -40,6 +41,16 @@ public partial class SessionRoot : Node
 
     /// <summary>The live host session, or <c>null</c> on a client and between sessions.</summary>
     public HostSession? Session => _hostSession;
+
+    /// <summary>
+    /// The grab authority (E1-04). A named child rather than a fifth autoload, which arch §6.2
+    /// forbids — it needs an identical path on every peer, and being this node's child gives it one.
+    /// </summary>
+    /// <remarks>
+    /// Built on every peer, host or client, because both halves of the protocol live on it: the
+    /// host resolves and the client receives. Only the host ever creates a joint (arch §3.3).
+    /// </remarks>
+    public Carry.GrabDirector Grabs => _grabs ??= Build();
 
     /// <summary>Whether a session is currently running on this peer.</summary>
     public bool IsInSession => Multiplayer.MultiplayerPeer is not null
@@ -82,6 +93,13 @@ public partial class SessionRoot : Node
         _hostSession = null;
     }
 
+    private Carry.GrabDirector Build()
+    {
+        var grabs = new Carry.GrabDirector { Name = Carry.GrabDirector.NodeName };
+        AddChild(grabs);
+        return grabs;
+    }
+
     private void StartWith(MultiplayerPeer peer)
     {
         // The one place the lag harness is attached (E0-07). Returns the peer untouched unless a
@@ -89,6 +107,10 @@ public partial class SessionRoot : Node
         Multiplayer.MultiplayerPeer = LatencyPeer.WrapIfConfigured(peer);
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
+
+        // Before BeginSession, because an RPC that arrives for a node the tree does not have yet
+        // is dropped with a warning nobody reads.
+        _ = Grabs;
         BeginSession();
     }
 
@@ -111,5 +133,11 @@ public partial class SessionRoot : Node
 
     private void OnPeerConnected(long id) => _hostSession?.PeerJoined(new PeerId(id));
 
-    private void OnPeerDisconnected(long id) => _hostSession?.PeerLeft(new PeerId(id));
+    private void OnPeerDisconnected(long id)
+    {
+        _hostSession?.PeerLeft(new PeerId(id));
+
+        // Their held parcels drop rather than staying frozen in a disconnected hand (E12-04).
+        _grabs?.ForgetCarrier(id);
+    }
 }

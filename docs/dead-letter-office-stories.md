@@ -193,7 +193,7 @@ where each machine records its own.*
 **Depends:** E14-04, E14-05, E14-06 · **Test:** build only · **Status:** 🔶 **Partial**
 
 - [x] On every push: restore, build, L1, L2, architecture test, `dotnet format --verify-no-changes`.
-- [ ] CI is green on an empty commit **and red on a deliberately failing test** — push one, watch
+- [x] CI is green on an empty commit **and red on a deliberately failing test** — push one, watch
       it fail, revert. A pipeline nobody has seen fail is not known to work.
       **Green half done; the red half is still owed** and `ci.yml` says so in its own header.
       This is the cheapest open item in the repo: one scratch branch, one bad assert, one delete.

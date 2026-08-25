@@ -333,3 +333,8 @@ public sealed class DepartureRun() : FourPeerSession(Scenario.Departure);
 /// E0-10's second run: the host tears the session down and every client ends its own cleanly.
 /// </summary>
 public sealed class HostLossRun() : FourPeerSession(Scenario.HostLoss);
+
+/// <summary>
+/// E1-06's run: three clients reach for one parcel at once and exactly one may end up with it.
+/// </summary>
+public sealed class ContentionRun() : FourPeerSession(Scenario.Contention);

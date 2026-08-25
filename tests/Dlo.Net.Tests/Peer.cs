@@ -2,6 +2,8 @@ using System;
 using System.Globalization;
 using System.Linq;
 
+using Dlo.Game;
+using Dlo.Game.Carry;
 using Dlo.Game.Net;
 using Godot;
 
@@ -58,6 +60,19 @@ public partial class Peer : Node
     /// <summary>How long a client waits before re-attempting a connection.</summary>
     private const double RetrySeconds = 0.25;
 
+    /// <summary>
+    /// Frames ignored after a grab is granted, before the parcel is watched for teleports (E1-06).
+    /// </summary>
+    /// <remarks>
+    /// Long enough to cover the grab snap and the replication tick that carries it. A client only
+    /// hears about the parcel every <c>ReplicationInterval</c>, so its very first post-grant sample
+    /// legitimately covers three frames of motion at once.
+    /// </remarks>
+    private const int GraceFrames = 8;
+
+    /// <summary>How far from the parcel each carrier stands. Inside <c>GrabRules.Reach</c>.</summary>
+    private const float CarrierRadius = 1.0f;
+
     private string _role = HostRole;
     private string _scenario = Scenario.Converge;
     private SessionRoot _session = null!;
@@ -71,6 +86,18 @@ public partial class Peer : Node
     private string _teardown = PeerReport.Live;
     private bool _finished;
 
+    // E1-06 only.
+    private Carryable? _parcel;
+    private PlayerCharacter? _carrier;
+    private GrabPredictor? _predictor;
+    private Vector3 _lastParcelAt = Vector3.Zero;
+    private double? _resolvedAt;
+    private int _framesSinceResolved;
+    private float _biggestJump;
+    private double _grabbedAt = double.NaN;
+    private double _answeredAt = double.NaN;
+    private bool _won;
+
     private bool IsHost => _role == HostRole;
 
     /// <summary>Whether this peer is the one that walks out in <see cref="Scenario.Departure"/>.</summary>
@@ -81,6 +108,19 @@ public partial class Peer : Node
     private bool HasEchoed => !double.IsNaN(_echoedAt);
 
     private int Crew => _session?.Session?.ConnectedPeers.Count ?? 0;
+
+    private bool HasGrabbed => !double.IsNaN(_grabbedAt);
+
+    private bool HasAnswered => !double.IsNaN(_answeredAt);
+
+    /// <summary>Clients that have said whether they won the contest (E1-06).</summary>
+    private int Answers => _beacon.Reports.Count(report =>
+        report.Value is Beacon.Contest or Beacon.Lost);
+
+    /// <summary>The grab authority, which <see cref="SessionRoot"/> builds on every peer.</summary>
+    private GrabDirector Grabs => _session.Grabs;
+
+    private string ParcelPath => _parcel?.GetPath().ToString() ?? string.Empty;
 
     /// <summary>Reports naming <see cref="Beacon.Aftermath"/> — the survivors, host-side.</summary>
     private int Echoes => _beacon.Reports.Count(report => report.Value == Beacon.Aftermath);
@@ -115,6 +155,14 @@ public partial class Peer : Node
         _session = new SessionRoot { Name = "SessionRoot", Transport = new EnetTransport() };
         AddChild(_session);
 
+        if (_scenario == Scenario.Contention)
+        {
+            // Built on every peer at the same path, exactly like the Beacon, because that is what
+            // lets an RPC name it. E2-01 replaces the path with a ParcelId, and E2-04 replaces this
+            // hand-built node with a spawn.
+            BuildParcel();
+        }
+
         if (IsHost)
         {
             _session.Host(ClientCount);
@@ -148,7 +196,19 @@ public partial class Peer : Node
         if (Status == MultiplayerPeer.ConnectionStatus.Connected)
         {
             _id = Multiplayer.GetUniqueId();
+
+            // A peer does not know its own id until it has connected, and the carrier built in
+            // _Ready was placed from the pre-connection one. Re-placed and re-registered once, so
+            // this peer stands where the HOST also believes it stands.
+            if (_carrier is not null && _carrier.Name != $"Carrier{_id}")
+            {
+                _carrier.Name = $"Carrier{_id}";
+                _carrier.Position = CarrierSpot(_id);
+                Grabs.RegisterCarrier(_id, _carrier);
+            }
         }
+
+        WatchParcel();
 
         if (IsHost)
         {
@@ -196,6 +256,28 @@ public partial class Peer : Node
                 }
 
                 if (Echoes == ClientCount - 1)
+                {
+                    Finish(PeerReport.Ok, 0);
+                }
+
+                break;
+
+            case Scenario.Contention:
+                // Every client is connected and has converged, so the field is level: the go
+                // signal is the last thing any of them is waiting for.
+                if (_beacon.Beat != Beacon.Contest)
+                {
+                    _beacon.Beat = Beacon.Contest;
+                    _grabbedAt = _elapsed;
+                    return;
+                }
+
+                // Waits for all three answers rather than for a clock. The first version of
+                // this used a timer and the host outlived the clients by nothing at all: it quit
+                // first, every client took the host-went-away path instead of its own, and the
+                // outcome each of them had computed was never in the report. It read as "nobody
+                // won" on a run where somebody plainly had.
+                if (Answers == ClientCount)
                 {
                     Finish(PeerReport.Ok, 0);
                 }
@@ -278,6 +360,35 @@ public partial class Peer : Node
 
                 break;
 
+            case Scenario.Contention:
+                if (!HasGrabbed)
+                {
+                    // All three reach on the frame they see the signal. True same-frame
+                    // simultaneity is not observable across processes - what is under test is that
+                    // the HOST serialises whatever order they arrive in and grants exactly once.
+                    if (_beacon.Beat == Beacon.Contest && _parcel is not null)
+                    {
+                        _grabbedAt = _elapsed;
+                        _predictor!.Press(_parcel);
+                    }
+                }
+                else if (!HasAnswered)
+                {
+                    // One flush window after asking, which is long enough on loopback for the
+                    // host to have decided and for GrabResolved or GrabRefused to have landed.
+                    if (_elapsed - _grabbedAt > FlushSeconds)
+                    {
+                        _won = Grabs.HoldersOf(ParcelPath).Contains(Multiplayer.GetUniqueId());
+                        Answer(_won ? Beacon.Contest : Beacon.Lost);
+                    }
+                }
+                else if (_elapsed - _answeredAt > FlushSeconds)
+                {
+                    Finish(PeerReport.Ok, 0);
+                }
+
+                break;
+
             case Scenario.HostLoss:
                 // Nothing to do but stay up. This scenario ends in the disconnected branch
                 // above, and a client that ends any other way was never told the host went
@@ -292,6 +403,13 @@ public partial class Peer : Node
 
                 break;
         }
+    }
+
+    /// <summary>Tells the host how the contest went for this peer, and stamps when it did.</summary>
+    private void Answer(int outcome)
+    {
+        _answeredAt = _elapsed;
+        _beacon.RpcId(1, Beacon.MethodName.ReportBeat, outcome);
     }
 
     /// <summary>Sends what this peer is holding to the host, and stamps when it did.</summary>
@@ -370,12 +488,176 @@ public partial class Peer : Node
         $"{PeerReport.Heard}={Heard()}",
         $"{PeerReport.Teardown}={_teardown}",
         $"{PeerReport.Attempts}={_attempts}",
+        $"{PeerReport.Won}={(_won ? 1 : 0)}",
+        $"{PeerReport.Joints}={Joints(this)}",
+        $"{PeerReport.Holders}={Grabs.HoldersOf(ParcelPath).Count}",
+        $"{PeerReport.Holder}={Holder()}",
+        $"{PeerReport.Parcel}={Where(_parcel)}",
+        $"{PeerReport.Jump}={_biggestJump.ToString("F3", CultureInfo.InvariantCulture)}",
         $"{PeerReport.Elapsed}={_elapsed.ToString("F2", CultureInfo.InvariantCulture)}");
 
     private string Heard() =>
         _beacon is null || _beacon.Reports.Count == 0
             ? PeerReport.None
             : string.Join(',', _beacon.Reports.Select(report => $"{report.Key}:{report.Value}"));
+
+    /// <summary>
+    /// Builds the contested parcel and this peer's carrier, identically on every peer.
+    /// </summary>
+    /// <remarks>
+    /// <b>The transform synchronizer is harness furniture</b>, like <see cref="Beacon"/> itself.
+    /// Parcels get their real replication classes in E2-05; this one carries a plain host-owned
+    /// transform so a losing client can be seen to converge on the host's truth rather than on a
+    /// guess of its own. Without it, E1-06's "the loser sees it move toward the winner" would have
+    /// nothing to observe, because nothing would be sending the winner's version.
+    /// </remarks>
+    private void BuildParcel()
+    {
+        // Without a floor the carrier, the parcel and the grip all free-fall together: the carry
+        // still works (the parcel tracks 5 cm under the hand, exactly E1-01's sag) but every
+        // position in the report is measured in a lift shaft. Measured 2026-08-25 - the first run
+        // of this scenario reported the parcel at y = -5.4.
+        var floor = new StaticBody3D { Name = "Floor", Position = new Vector3(0, -0.5f, 0) };
+        floor.AddChild(new CollisionShape3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(60, 1, 60) },
+        });
+        AddChild(floor);
+
+        _parcel = new Carryable
+        {
+            Name = "Parcel",
+            Mass = 20.0f,
+            Position = new Vector3(0, 1.0f, 0),
+        };
+        _parcel.AddChild(new CollisionShape3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(0.6f, 0.6f, 0.6f) },
+        });
+
+        var transform = new NodePath(".:position");
+        var config = new SceneReplicationConfig();
+        config.AddProperty(transform);
+        config.PropertySetReplicationMode(transform, SceneReplicationConfig.ReplicationMode.Always);
+
+        _parcel.AddChild(new MultiplayerSynchronizer
+        {
+            Name = "Sync",
+            ReplicationConfig = config,
+            RootPath = "..",
+            ReplicationInterval = 0.05,
+        });
+
+        AddChild(_parcel);
+        _lastParcelAt = _parcel.Position;
+
+        // A carrier each, standing in a different place, all of them inside reach.
+        //
+        // Different places matter: with everyone co-located the loser's own hand and the winner's
+        // hand are the same point, and E1-06's "the loser sees it move toward the winner" asserts
+        // nothing at all. Equidistant matters too - nobody may win on range, or the contest is
+        // decided by geometry instead of by the host.
+        //
+        // The spot is derived from the peer id, so the host and the peer itself compute the same
+        // one without any protocol to agree it. Nothing spawns characters per peer yet (no story
+        // owns that), and this is the cheapest thing that is not a lie.
+        _carrier = Carrier(Multiplayer.GetUniqueId());
+        Multiplayer.PeerConnected += id => Grabs.RegisterCarrier(id, Carrier(id));
+
+        // Clients reach through the predictor rather than calling the director, because that is
+        // what a real client does - and it is the only way the rollback under test is the real one.
+        _predictor = new GrabPredictor { Name = "Predictor" };
+        AddChild(_predictor);
+        _predictor.Bind(Grabs, _carrier, arms: null);
+    }
+
+    /// <summary>Builds, places and registers one peer's carrier, and returns it.</summary>
+    private PlayerCharacter Carrier(long peerId)
+    {
+        var carrier = new PlayerCharacter
+        {
+            Name = $"Carrier{peerId}",
+            Position = CarrierSpot(peerId),
+        };
+        carrier.AddChild(new CollisionShape3D
+        {
+            Shape = new CapsuleShape3D { Height = 1.8f, Radius = 0.3f },
+        });
+
+        AddChild(carrier);
+        Grabs.RegisterCarrier(peerId, carrier);
+        return carrier;
+    }
+
+    /// <summary>Where the carrier for <paramref name="peerId"/> stands: around the parcel, in reach.</summary>
+    private static Vector3 CarrierSpot(long peerId)
+    {
+        // Quartered around the parcel. Peer ids are large and arbitrary, so this only has to be
+        // stable and spread - it does not have to be fair.
+        var angle = Mathf.Pi * 0.5f * (peerId % 4);
+        return new Vector3(
+            Mathf.Cos(angle) * CarrierRadius,
+            1.0f,
+            Mathf.Sin(angle) * CarrierRadius);
+    }
+
+    /// <summary>Tracks the biggest single-frame move this peer saw the parcel make (E1-06).</summary>
+    private void WatchParcel()
+    {
+        if (_parcel is null)
+        {
+            return;
+        }
+
+        var at = _parcel.Position;
+
+        // Watched only once the contest is RESOLVED, and there is a real distinction here.
+        //
+        // E1-06 forbids the parcel teleporting on the loser when the rollback lands. It says
+        // nothing about the winner's grab, and the grab does currently snap the parcel into the
+        // hand - see GrabDirector.Crew, where the lift is explicit. Measuring from before the grant
+        // would fold that snap into this number and the assertion would be about the wrong thing.
+        if (_resolvedAt is null && Grabs.HoldersOf(ParcelPath).Count > 0)
+        {
+            _resolvedAt = _elapsed;
+        }
+
+        // Counted in FRAMES, not seconds. A wall-clock grace made this flaky: under the load of
+        // four scenarios back to back a single frame can run long, the grab snap lands inside the
+        // window, and the run fails on a 2 m "teleport" that is really the lift. Frames do not
+        // stretch. Observed once in a full-suite run, 2026-08-25.
+        if (_resolvedAt is not null && ++_framesSinceResolved > GraceFrames)
+        {
+            _biggestJump = Mathf.Max(_biggestJump, at.DistanceTo(_lastParcelAt));
+        }
+
+        _lastParcelAt = at;
+    }
+
+    private string Holder()
+    {
+        var holders = _parcel is null ? [] : Grabs.HoldersOf(ParcelPath);
+        return holders.Count == 0 ? PeerReport.None : string.Join(',', holders);
+    }
+
+    private static int Joints(Node node)
+    {
+        var found = node is Joint3D ? 1 : 0;
+        foreach (var child in node.GetChildren())
+        {
+            found += Joints(child);
+        }
+
+        return found;
+    }
+
+    private static string Where(Node3D? node) => node is null
+        ? PeerReport.None
+        : string.Join(
+            '|',
+            node.Position.X.ToString("F3", CultureInfo.InvariantCulture),
+            node.Position.Y.ToString("F3", CultureInfo.InvariantCulture),
+            node.Position.Z.ToString("F3", CultureInfo.InvariantCulture));
 
     /// <summary>Reads one <c>--switch=value</c> off the command line, or its default.</summary>
     private static string Argument(string prefix, string fallback)

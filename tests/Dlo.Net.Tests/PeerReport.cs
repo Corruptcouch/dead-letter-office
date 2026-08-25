@@ -97,6 +97,24 @@ public static class PeerReport
     /// <summary>Stands in for an empty <see cref="Heard"/>, so the field never parses as absent.</summary>
     public const string None = "-";
 
+    /// <summary>E1-06: whether this client ended up holding the contested parcel.</summary>
+    public const string Won = "won";
+
+    /// <summary>E1-06: physics joints this peer created. Must be zero anywhere but the host.</summary>
+    public const string Joints = "joints";
+
+    /// <summary>E1-06: carriers the host granted a grip to. Must be exactly one.</summary>
+    public const string Holders = "holders";
+
+    /// <summary>E1-06: the peer ids this peer believes hold the parcel.</summary>
+    public const string Holder = "holder";
+
+    /// <summary>E1-06: where this peer's copy of the parcel finished, as <c>x|y|z</c>.</summary>
+    public const string Parcel = "parcel";
+
+    /// <summary>E1-06: the largest single-frame jump this peer saw the parcel make.</summary>
+    public const string Jump = "jump";
+
     /// <summary>Whether <paramref name="line"/> is a peer report rather than engine output.</summary>
     public static bool IsReport(string line) =>
         line.StartsWith(Prefix + " ", StringComparison.Ordinal);

@@ -38,6 +38,26 @@ public partial class Beacon : Node
     public const int Aftermath = 11;
 
     /// <summary>
+    /// The third value: the host telling every client to reach for the parcel at once (E1-06).
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="Sentinel"/> and <see cref="Aftermath"/> for the same reason those
+    /// are distinct from the default — a client that grabbed on the wrong value would make the
+    /// contention window meaningless, and the run would still go green.
+    /// </remarks>
+    public const int Contest = 13;
+
+    /// <summary>
+    /// A client reporting back that it lost the contest (E1-06).
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="Contest"/> <i>and</i> from <see cref="Sentinel"/>, because the host
+    /// finishes when all three clients have answered the contest — and a loser echoing the sentinel
+    /// it already sent would be indistinguishable from not having answered at all.
+    /// </remarks>
+    public const int Lost = 17;
+
+    /// <summary>
     /// The host-owned replicated value. <c>[Export]</c> is not decoration — a
     /// <see cref="SceneReplicationConfig"/> can only name properties Godot can see.
     /// </summary>

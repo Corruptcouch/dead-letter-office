@@ -37,6 +37,11 @@ public static class Scenario
     public const string HostLoss = "hostloss";
 
     /// <summary>
+    /// E1-06. Every client reaches for one parcel at once, and exactly one may end up holding it.
+    /// </summary>
+    public const string Contention = "contention";
+
+    /// <summary>
     /// The client that leaves in <see cref="Departure"/>. Named here rather than on either
     /// side so the peer deciding to leave and the test asserting who left cannot disagree.
     /// </summary>
