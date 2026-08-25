@@ -3,15 +3,8 @@ using Godot;
 namespace Dlo.Game.Net;
 
 /// <summary>
-/// The three replication classes of arch §3.4, and the only place their
-/// <c>replication_interval</c> values are written down.
+/// The three replication classes of arch §3.4. A parcel is in exactly one at any moment.
 /// </summary>
-/// <remarks>
-/// A parcel is in exactly one of these at any moment. <see cref="Railed"/> is the one the
-/// design depends on: the belt never stops (vision §2), so most parcels in a shift are railed
-/// or asleep, and both cost nothing. Arch §3.4 is explicit that a belt parcel in
-/// <see cref="Dynamic"/> is a bug against that section rather than a tuning problem.
-/// </remarks>
 public enum ReplicationClass
 {
     /// <summary>
@@ -32,31 +25,13 @@ public enum ReplicationClass
 /// (E0-06). The mechanism only — parcels start using it in E2-05.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <b>Per class, never globally</b> (arch §3.4). One interval for the whole game is the
-/// straightforward thing to write and it is what makes the 200 KB/s arithmetic in that section
-/// come true: it prices every sleeping parcel at the rate the thrown one needs.
-/// </para>
-/// <para>
-/// <b>Promotion and demotion do not respawn anything.</b> Knock a parcel off the belt and it
-/// goes <c>Railed → Dynamic</c>; let it settle and it goes <c>Dynamic → Sleeping</c>. Both are
-/// a reconfiguration of the synchronizer already on the node, because respawning would destroy
-/// the identity that E2-02 exists to preserve.
-/// </para>
-/// <para>
-/// <b>This story introduces no RPC.</b> Arch §3.1's <c>TransferMode</c> / <c>CallLocal</c> rule
-/// therefore has nothing to bite on: everything here rides
-/// <see cref="MultiplayerSynchronizer"/>, whose traffic is unreliable by construction. Stated
-/// rather than skipped — "no RPCs were added" and "nobody thought about the RPC defaults" look
-/// the same in a diff, and the second one is how a positional stream ends up
-/// <c>Reliable</c>.
-/// </para>
+/// Intervals are set per class, never globally (arch §3.4): one interval for the whole game
+/// prices every sleeping parcel at the rate the thrown one needs.
 /// </remarks>
 public static class Replication
 {
     /// <summary>
-    /// <see cref="ReplicationClass.Dynamic"/>: 30 Hz. The only class that streams, and the one
-    /// every budget number in arch §8 is really about.
+    /// <see cref="ReplicationClass.Dynamic"/>: 30 Hz. The only class that streams.
     /// </summary>
     public const double DynamicInterval = 1.0 / 30.0;
 
@@ -65,10 +40,8 @@ public static class Replication
     /// </summary>
     /// <remarks>
     /// Counter-intuitive but correct. A railed parcel's rail tuple is watched rather than
-    /// streamed, so this interval governs how soon a <i>change</i> is noticed, not how often
-    /// anything is sent. Nothing changes after entry, so the traffic is one message and then
-    /// silence — and when the parcel does get knocked off the belt, the promotion is seen on
-    /// the next tick rather than up to a frame late.
+    /// streamed, so this governs how soon a <i>change</i> is noticed, not how often anything is
+    /// sent — and a parcel knocked off the belt is promoted on the next tick rather than late.
     /// </remarks>
     public const double RailedInterval = 0.0;
 
@@ -76,10 +49,9 @@ public static class Replication
     /// <see cref="ReplicationClass.Sleeping"/>: an hour, which is a deliberate absurdity.
     /// </summary>
     /// <remarks>
-    /// A sleeping parcel replicates nothing, so any interval would do. This one is chosen so
-    /// that if a property is ever left on <c>Always</c> by mistake, the result is one stray
-    /// packet an hour rather than a silent 30 Hz stream from every parcel at rest in the
-    /// facility — which is precisely the bill arch §3.4 refuses to pay, arriving by accident.
+    /// A sleeping parcel replicates nothing, so any interval would do. This one means that a
+    /// property left on <c>Always</c> by mistake costs one stray packet an hour rather than a
+    /// silent 30 Hz stream from every parcel at rest in the facility.
     /// </remarks>
     public const double SleepingInterval = 3600.0;
 
@@ -94,6 +66,8 @@ public static class Replication
 
     /// <summary>
     /// Puts <paramref name="synchronizer"/> into <paramref name="replicationClass"/>, in place.
+    /// Reconfigured rather than respawned, because respawning would destroy the identity E2-02
+    /// exists to preserve.
     /// </summary>
     /// <param name="synchronizer">The node's existing synchronizer. It is not replaced.</param>
     /// <param name="replicationClass">The class to move to.</param>
@@ -117,8 +91,8 @@ public static class Replication
         Ensure(config, transform);
         Ensure(config, rail);
 
-        // Always = streamed on the interval. OnChange = watched, and sent only when it moves.
-        // Never = the property exists in the config but no bytes leave because of it.
+        // Always = streamed on the interval. OnChange = watched, sent only when it moves.
+        // Never = the property is in the config but no bytes leave because of it.
         config.PropertySetReplicationMode(transform, replicationClass == ReplicationClass.Dynamic
             ? SceneReplicationConfig.ReplicationMode.Always
             : SceneReplicationConfig.ReplicationMode.Never);
@@ -130,8 +104,8 @@ public static class Replication
         synchronizer.ReplicationConfig = config;
         synchronizer.ReplicationInterval = (float)IntervalFor(replicationClass);
 
-        // Watched properties have their own interval, and leaving it at the streamed one would
-        // make a promotion off the belt wait for the Sleeping hour to elapse.
+        // Watched properties have their own interval; leaving it at the streamed one would make
+        // a promotion off the belt wait for the Sleeping hour to elapse.
         synchronizer.DeltaInterval = (float)RailedInterval;
     }
 

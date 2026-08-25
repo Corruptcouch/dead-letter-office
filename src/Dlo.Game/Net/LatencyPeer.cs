@@ -9,26 +9,18 @@ namespace Dlo.Game.Net;
 /// one desk behaves like one over a real connection (E0-07, arch §3.5).
 /// </summary>
 /// <remarks>
+/// <b>Required infrastructure, not a nicety.</b> Vision §15 asks whether a shared physical object
+/// still feels believable <i>over real internet</i>; without a lag harness the MVP answers an
+/// easier question. E19-03 is explicit that it supplements four real connections, never substitutes.
 /// <para>
-/// <b>Required infrastructure, not a nicety.</b> Vision §15's validation question is whether a
-/// shared physical object still feels believable <i>over real internet</i>. Without a lag
-/// harness the MVP answers an easier question than the one Gate 1 is asking. E19-03 is explicit
-/// that this supplements four real connections rather than substituting for them.
+/// <b>It delays what arrives, not what leaves</b>, so a round trip costs twice
+/// <see cref="DelaySetting"/> — the figure people actually quote.
 /// </para>
 /// <para>
-/// <b>It delays what arrives, not what leaves.</b> Each end holding its own inbound packets for
-/// <see cref="DelaySetting"/> milliseconds makes a round trip cost twice that, which is the
-/// number people actually quote. Delaying both directions at both ends would double it again
-/// and quietly make every measurement wrong.
-/// </para>
-/// <para>
-/// <b>Reordering is allowed only where the network would really do it.</b> Jitter is applied
-/// per packet, but the release order of <c>Reliable</c> and <c>UnreliableOrdered</c> traffic is
-/// preserved: ENet has already guaranteed that ordering by the time a packet reaches this
-/// class, and re-breaking it here would not simulate a network — it would simulate a bug that
-/// cannot happen, and would tear scene replication apart while doing it. Plain
-/// <c>Unreliable</c> packets are free to overtake each other, because that is exactly what they
-/// do in the wild.
+/// <b>Reordering is allowed only where the network would really do it.</b> Jitter is per packet,
+/// but <c>Reliable</c> and <c>UnreliableOrdered</c> release order is preserved: ENet has already
+/// guaranteed it, so re-breaking it here would simulate a bug that cannot happen — and would tear
+/// scene replication apart doing it. Plain <c>Unreliable</c> packets may overtake each other.
 /// </para>
 /// </remarks>
 // ponytail: LatencyPeer delays and reorders packets in a decorator over MultiplayerPeer.
@@ -74,11 +66,10 @@ public partial class LatencyPeer : MultiplayerPeerExtension
     /// The flag is set in a build that is not a debug build.
     /// </exception>
     /// <remarks>
-    /// <b>The guard is an assertion, not a convention</b> (E0-07). A shipping build that
-    /// silently added 150 ms to every packet would be indistinguishable from a bad connection,
-    /// and no one would think to look for a project setting. <see cref="OS.IsDebugBuild"/> is
-    /// true in the editor and in a debug export, and false in a release export, so the check
-    /// costs nothing in development and cannot be talked around at export time.
+    /// <b>The guard is an assertion, not a convention</b> (E0-07): a shipping build that silently
+    /// added 150 ms to every packet is indistinguishable from a bad connection, and nobody would
+    /// think to look for a project setting. <see cref="OS.IsDebugBuild"/> is false only in a
+    /// release export, so the check costs nothing in development and cannot be talked around.
     /// </remarks>
     public static MultiplayerPeer WrapIfConfigured(MultiplayerPeer peer)
     {
@@ -101,9 +92,9 @@ public partial class LatencyPeer : MultiplayerPeerExtension
     }
 
     /// <summary>
-    /// Whether this build must refuse to wrap. Separated from
-    /// <see cref="WrapIfConfigured"/> so the rule can be asserted directly: the case that
-    /// matters is the one that only exists in a release export, which no test can stand inside.
+    /// Whether this build must refuse to wrap. Separate from <see cref="WrapIfConfigured"/> so the
+    /// rule can be asserted directly — the case that matters only exists inside a release export,
+    /// where no test can stand.
     /// </summary>
     public static bool Refuse(bool enabled, bool isDebugBuild) => enabled && !isDebugBuild;
 

@@ -11,25 +11,10 @@ namespace Dlo.Game.Net;
 /// arch §5.2).
 /// </summary>
 /// <remarks>
-/// <para>
-/// <b>The payload is a deliberate decision at every call site.</b> Godot would happily
-/// replicate whatever Variant it is handed, and the lazy thing is to hand it the whole record.
-/// This wrapper cannot stop you doing that, but the registry makes the payload an explicit
-/// argument to <see cref="Spawn"/> rather than something that travels by accident — and arch
-/// §5.3 turns that from tidiness into a rule, because the manifest a client has not scanned
-/// must never be on the wire. E2-04 asserts the absence by inspecting the serialised bytes.
-/// </para>
-/// <para>
-/// <b>Adding a spawnable type does not touch this class.</b> A type registers a key and a
-/// builder; the wrapper only routes. That is the difference between content and code (arch
-/// §4.1), and it is why the parcel archetypes of E13-01 can arrive without a wrapper change.
-/// </para>
-/// <para>
-/// <b>This story introduces no RPC</b>, so arch §3.1's <c>TransferMode</c> / <c>CallLocal</c>
-/// rule has nothing to bite on here — spawning rides <see cref="MultiplayerSpawner"/>'s own
-/// reliable channel. Stated rather than skipped, because "no RPCs were added" and "nobody
-/// thought about the RPC defaults" look identical in a diff.
-/// </para>
+/// The registry makes the payload an explicit argument to <see cref="Spawn"/> rather than
+/// something that travels by accident: arch §5.3 forbids putting an unscanned manifest on the
+/// wire, and E2-04 asserts its absence by inspecting the serialised bytes. Registering a type
+/// does not touch this class — the wrapper only routes.
 /// </remarks>
 public partial class NetworkSpawner : Node
 {
@@ -46,12 +31,10 @@ public partial class NetworkSpawner : Node
     {
         _spawner = new MultiplayerSpawner { Name = "Spawner", SpawnPath = SpawnRoot };
 
-        // The custom spawn function is what makes this a wrapper rather than a scene list:
-        // Godot calls it on every peer with the same payload, so a client builds its own node
-        // instead of being sent one.
-        // The bang is load bearing rather than lazy: Godot's spawn function is allowed to
-        // return null - that is how it declines an unknown key - but Callable.From has no way
-        // to say so, so the delegate type claims non-null and the compiler believes it.
+        // Godot calls the spawn function on every peer with the same payload, so a client builds
+        // its own node instead of being sent one.
+        // The bang is load bearing: a spawn function may return null to decline an unknown key,
+        // but Callable.From cannot express that, so the delegate type claims non-null.
         _spawner.SpawnFunction = Callable.From<Variant, Node>(payload => Build(payload)!);
         AddChild(_spawner);
     }
@@ -62,8 +45,8 @@ public partial class NetworkSpawner : Node
     /// <param name="key">Names the kind on the wire. Short: it is sent with every spawn.</param>
     /// <param name="build">
     /// Builds the node from its arguments and <b>nothing else</b>. It runs on every peer,
-    /// including ones that have never seen this object before, so anything it reads that did
-    /// not arrive in <paramref name="build"/>'s argument is state a client cannot have.
+    /// including ones that have never seen this object before, so anything it reads that did not
+    /// arrive in its argument is state a client cannot have.
     /// </param>
     public void Register(string key, Func<Variant, Node> build)
     {
@@ -83,8 +66,7 @@ public partial class NetworkSpawner : Node
     {
         if (!_builders.ContainsKey(key))
         {
-            // Loud, because the alternative is a host that spawns nothing and clients that are
-            // never told why - and the same typo would fail identically on all four machines.
+            // Loud: the alternative is a host that spawns nothing and clients never told why.
             throw new InvalidOperationException(
                 $"Nothing is registered to spawn '{key}'. Registered: "
                 + $"{string.Join(", ", _builders.Keys)}.");
@@ -100,9 +82,8 @@ public partial class NetworkSpawner : Node
     /// Godot's spawn function, run on every peer including the host.
     /// </summary>
     /// <remarks>
-    /// Returning <c>null</c> for an unknown key rather than throwing: content outlives the
-    /// table that described it (standards §9), and a client running a slightly older build
-    /// should be missing one object rather than losing the session.
+    /// An unknown key returns <c>null</c> rather than throwing: content outlives the table that
+    /// described it (standards §9), so an older client is missing one object, not the session.
     /// </remarks>
     private Node? Build(Variant payload)
     {

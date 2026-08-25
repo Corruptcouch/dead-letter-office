@@ -8,23 +8,10 @@ namespace Dlo.Domain;
 /// and knows who is connected to it.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <b>It receives its systems; it never builds them</b> (arch §3.2). That is not a style
-/// preference — it is what lets the L1 suite construct a session with substitutes and assert
-/// against it without an engine, a transport or a peer. The one place that <i>does</i> build
-/// them is <c>SessionRoot</c>, and the review checklist greps for a second one because no test
-/// can catch it.
-/// </para>
-/// <para>
-/// <b>It has no Godot in it, deliberately.</b> A session is a domain fact — who is playing,
-/// how far into the shift they are, what the report will say. <c>SessionRoot</c> is the node
-/// that owns the peer and the transport and feeds this; nothing here knows what a signal is
-/// (standards §0).
-/// </para>
-/// <para>
-/// Clients construct nothing. There is no client-side <see cref="ShiftDirector"/> to drift out
-/// of step with the host's, which is arch §3.1's whole position expressed as a missing object.
-/// </para>
+/// It receives its systems and never builds them (arch §3.2), so the L1 suite can construct a
+/// session with substitutes and no engine. <c>SessionRoot</c> is the one place that does build
+/// them, and the review checklist greps for a second because no test can catch it. Clients
+/// construct nothing: there is no client-side <see cref="ShiftDirector"/> to drift out of step.
 /// </remarks>
 public sealed class HostSession
 {
@@ -67,8 +54,8 @@ public sealed class HostSession
     /// </summary>
     /// <returns><c>true</c> if this was a new peer; <c>false</c> if it was already known.</returns>
     /// <remarks>
-    /// Idempotent on purpose. A transport is allowed to tell you the same thing twice, and a
-    /// session that double-counts a peer would report a crew of five.
+    /// Idempotent on purpose: a transport may report the same thing twice, and a session that
+    /// double-counted would report a crew of five.
     /// </remarks>
     public bool PeerJoined(PeerId peer) => _connectedPeers.Add(peer);
 
@@ -77,10 +64,8 @@ public sealed class HostSession
     /// </summary>
     /// <returns><c>true</c> if the peer was connected; <c>false</c> if it was not known.</returns>
     /// <remarks>
-    /// This forgets the <i>connection</i> and nothing else. When there is a ledger to survive
-    /// a leaver, it must survive one: vision §7 and E12-04 are explicit that the report still
-    /// names someone who quit, because a leaver whose blame evaporates has learned they can
-    /// escape the report.
+    /// This forgets the <i>connection</i> and nothing else. When there is a ledger, it must
+    /// survive a leaver — vision §7 and E12-04 require the report to still name someone who quit.
     /// </remarks>
     public bool PeerLeft(PeerId peer) => _connectedPeers.Remove(peer);
 }

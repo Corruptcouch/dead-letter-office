@@ -9,22 +9,17 @@ namespace Dlo.Game.Net;
 /// permitted autoloads (arch §6.2).
 /// </summary>
 /// <remarks>
-/// <para>
 /// <b><see cref="BeginSession"/> is the only place in the codebase that constructs a domain
-/// system</b>, and it does so behind exactly one <c>Multiplayer.IsServer()</c> branch
-/// (arch §3.2). No architecture test can catch a second one; the review checklist greps for it.
-/// </para>
+/// system</b>, behind exactly one <c>Multiplayer.IsServer()</c> branch (arch §3.2). No
+/// architecture test can catch a second one; the review checklist greps for it.
 /// <para>
-/// <b>Known divergence from arch §3.2, which puts that construction in <c>_Ready</c>.</b>
-/// It cannot go there. This is an autoload, so <c>_Ready</c> runs once at boot, before anyone
-/// has hosted or joined and before a <c>MultiplayerPeer</c> exists — and with no peer set,
-/// <c>Multiplayer.IsServer()</c> returns <b>true on every machine</b> (asserted in the L2
-/// suite, so this claim fails loudly if the engine ever changes it). Following the snippet
-/// literally would therefore build a <see cref="HostSession"/> on every client at startup:
-/// precisely the client-side domain system the seam exists to prevent, created by the code
-/// meant to prevent it. So the branch moved to the point where a peer is known.
-/// What the stated version would need: a per-session node spawned after the peer is assigned,
-/// rather than an autoload. Arch §6.2 asks for an autoload, so the branch moved instead.
+/// <b>Known divergence from arch §3.2, which puts that construction in <c>_Ready</c>.</b> It
+/// cannot go there: this is an autoload, so <c>_Ready</c> runs at boot before any peer exists —
+/// and with no peer set <c>Multiplayer.IsServer()</c> returns <b>true on every machine</b>
+/// (asserted in L2, so this claim fails loudly if the engine changes it). The literal version
+/// would build a <see cref="HostSession"/> on every client at startup, which is the exact thing
+/// the seam prevents. Implementing it as stated needs a per-session node spawned after the peer
+/// is assigned; arch §6.2 asks for an autoload, so the branch moved instead.
 /// </para>
 /// </remarks>
 public partial class SessionRoot : Node
@@ -89,11 +84,8 @@ public partial class SessionRoot : Node
 
     private void StartWith(MultiplayerPeer peer)
     {
-        // The one place the lag harness is attached (E0-07). It returns the peer untouched
-        // unless a development build has asked for it, and throws rather than wrapping if the
-        // flag survived into a release export - a shipping build that silently added 150 ms to
-        // every packet would look exactly like a bad connection, and nobody would think to go
-        // looking for a project setting.
+        // The one place the lag harness is attached (E0-07). Returns the peer untouched unless a
+        // development build asked for it, and throws if the flag survived into a release export.
         Multiplayer.MultiplayerPeer = LatencyPeer.WrapIfConfigured(peer);
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;

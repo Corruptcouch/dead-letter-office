@@ -19,6 +19,35 @@
 
 ---
 
+## Status at a glance
+
+**Updated 2026-08-25**, and verified against the working tree rather than from memory: every
+story marked Done below had its acceptance criteria re-checked, and the two that fall short are
+marked as such instead of being rounded up.
+
+| | Stories | Where it stands |
+| :-- | :-- | :-- |
+| **E14** Foundation | **8 done**, 1 partial | Complete bar E14-07's deliberate-failure run |
+| **E0** Netcode spine | **8 done**, 2 blocked | Spine is in and L3-proven. Steam is the only hole |
+| **E1** Embodiment | **2 done**, 8 open | Both spikes reported, controller in. **E1-03 is next** |
+| **E2 · E3 · E4** Tier 1 | 0 of 30 | Not started. E2-01 is unblocked today |
+| **Alongside** E12·13·15·17·18·19 | 0 of 29 | Not started. E15-04 and E19-01 are needed *before* Gate 0 |
+
+**18 of 88 decomposed stories are done.** The two exceptions worth naming, because both are
+cheap and both are the kind of thing that quietly stays open:
+
+- **E14-07** — CI runs everything it should and is green, but nobody has watched it go **red**.
+  A pipeline never seen to fail is not known to work as a gate.
+- **E0-01 / E0-03** — the Steam path. Blocked on Steam accounts on separate machines, not on any
+  decision. The seam around it is finished, so nothing else waits on it.
+
+**Gate 0 is the next milestone**, and its critical path is
+`E1-03 → E1-04 → E1-07 → E1-09`, with **E15-04** (settings) and **E19-01 → E19-02** (the
+instrument) needed alongside it. A participant who cannot set their own sensitivity is testing
+your mouse, not your grab feel — which is why E15-04 is on this path and not after it.
+
+---
+
 ## How to use this document
 
 **Every story inherits, and therefore does not restate:**
@@ -38,9 +67,16 @@ marked *build only* is proved by the build, per `AGENTS.md` on trivia.
 **`(post-MVP)`** on a title means the story belongs to its epic but is **not** required to reach
 Gate 1 — vision §15 defers it. Build it when the epic is otherwise done and no gate is waiting.
 
+**Mark a story off in the same PR that finishes it.** A checkbox is flipped when its criterion
+is *verified*, not when the code that should satisfy it is written — and a story's `**Status:**`
+goes to Done only when every one of its boxes is ticked. Anything short of that is 🔶 Partial with
+the unmet box left open and one line saying what is owed, which is the state E14-07 is in and the
+reason it is still findable. A story quietly left unmarked is indistinguishable from one nobody
+started, and re-deriving the difference costs an afternoon of reading the tree.
+
 **Dependencies are story-level, and they are the only sequencing signal here.** There are no
-estimates, deliberately. Walk the graph; [the first ten stories](#the-first-ten-stories-in-order)
-are already walked for you.
+estimates, deliberately. Walk the graph — [the first ten](#the-first-ten-stories--all-walked) are
+walked and done, and [what to work on next](#what-to-work-on-next) is read off the same graph.
 
 ---
 
@@ -51,15 +87,15 @@ are already walked for you.
 *A repo any developer can clone, build and test in under ten minutes.*
 
 #### E14-01 · Solution scaffold
-**Depends:** — · **Test:** build only
+**Depends:** — · **Test:** build only · **Status:** ✅ **Done**
 
 Create `dlo.sln` and the project layout of Arch §1.3 exactly: `src/Dlo.Domain`,
 `tests/Dlo.Domain.Tests`, `tests/Dlo.Game.Tests`, `tests/Dlo.Net.Tests`, `tools/Dlo.ContentTool`.
 
-- [ ] `dotnet build dlo.sln` succeeds on a fresh clone with no manual step.
-- [ ] `Dlo.Domain` targets `net10.0` and has zero package references.
-- [ ] The layout matches Arch §1.3, including `tools/`, which nothing uses yet.
-- [ ] **`dotnet new sln --format sln`, not the bare command.** The .NET 10 SDK now defaults to the
+- [x] `dotnet build dlo.sln` succeeds on a fresh clone with no manual step.
+- [x] `Dlo.Domain` targets `net10.0` and has zero package references.
+- [x] The layout matches Arch §1.3, including `tools/`, which nothing uses yet.
+- [x] **`dotnet new sln --format sln`, not the bare command.** The .NET 10 SDK now defaults to the
       newer `.slnx` format, and Godot 4.7.2's tooling reads classic `.sln` — it even prints advice
       about removing an unused `.sln` after migrating, which is the wrong instruction here. Take
       the classic format and do not revisit it until Godot does.
@@ -72,123 +108,126 @@ failure E14-02 exists to prevent, arriving one story early.*
 after (Arch §1.4).*
 
 #### E14-02 · `.editorconfig`, `Directory.Build.props`, `global.json`
-**Depends:** E14-01 · **Test:** build only
+**Depends:** E14-01 · **Test:** build only · **Status:** ✅ **Done**
 
-- [ ] `global.json` pins **an exact .NET 10 SDK version**, not "10". The development machine has
+- [x] `global.json` pins **an exact .NET 10 SDK version**, not "10". The development machine has
       four SDKs installed — 8.0.424, 9.0.315, 10.0.204 and 10.0.400 — and with no pin, `dotnet`
       silently takes the highest. A build that differs between a developer and CI because nobody
       chose is the failure this file exists to prevent.
-- [ ] **`net10.0` is set in `Directory.Build.props`, with a comment saying why it overrides
+- [x] **`net10.0` is set in `Directory.Build.props`, with a comment saying why it overrides
       Godot.** Godot 4.7.2 generates `net8.0` for `Dlo.Game`; we override it (Arch §1.4, verified
       working). The comment is the acceptance criterion, not a nicety — without it the next person
       sees the override, assumes it was a mistake, and reverts it back to what Godot generates.
-- [ ] **`Dlo.Game.csproj` carries its own explicit `net10.0`, and that is correct.** This bullet
+- [x] **`Dlo.Game.csproj` carries its own explicit `net10.0`, and that is correct.** This bullet
       originally read *every* project, and that turned out to be unachievable: Godot **re-adds a
       missing TFM line** as `net8.0`, and MSBuild imports `Directory.Build.props` before the
       project body, so the returned line wins. The props file is the authority for the five
       hand-authored projects; Dlo.Game is the exception (Arch §1.4, corrected in E14-03).
-- [ ] The override survives Godot: open the project in the editor, then confirm
+- [x] The override survives Godot: open the project in the editor, then confirm
       `<TargetFramework>` is still `net10.0`. **This one cannot run until E14-03 exists** — check
       it there, not here, and check it by comparing a checksum across a full editor session rather
       than by eye.
-- [ ] Nullable is enabled everywhere; warnings-as-errors in **`Dlo.Domain` only** — proved by
+- [x] Nullable is enabled everywhere; warnings-as-errors in **`Dlo.Domain` only** — proved by
       introducing one warning in each project and observing exactly one failure. The Game layer
       builds Godot's noisy generated glue, and failing on it means nobody can build.
-- [ ] `dotnet format --verify-no-changes` passes and is the formatting authority.
-- [ ] Every custom MSBuild property lives in `Directory.Build.props` at the repo root, because
+- [x] `dotnet format --verify-no-changes` passes and is the formatting authority.
+- [x] Every custom MSBuild property lives in `Directory.Build.props` at the repo root, because
       Godot destroys anything put in `Dlo.Game.csproj` (Arch §1.4).
 
 #### E14-03 · Godot project, with Jolt set explicitly
-**Depends:** E14-01 · **Test:** build only
+**Depends:** E14-01 · **Test:** build only · **Status:** ✅ **Done**
 
-- [ ] `src/Dlo.Game/project.godot` opens in **Godot 4.7.2-stable-mono** and the generated
+- [x] `src/Dlo.Game/project.godot` opens in **Godot 4.7.2-stable-mono** and the generated
       `Dlo.Game.csproj` carries a project reference to `Dlo.Domain`.
-- [ ] **The csproj is bootstrapped by hand, once, from the editor menu** — *Project → Tools → C#
+- [x] **The csproj is bootstrapped by hand, once, from the editor menu** — *Project → Tools → C#
       → Create C# solution*. There is no CLI flag for it: `--build-solutions` is a silent no-op
       when no csproj exists, and opening the project does not trigger it either. Budget for the
       click; it is not automatable (Arch §1.4).
-- [ ] `project/solution_directory="../.."` is set, or the exporter refuses every C# source at
+- [x] `project/solution_directory="../.."` is set, or the exporter refuses every C# source at
       export time (Arch §1.4).
-- [ ] **Godot's own `Dlo.Game.sln` is deleted, leaving `dlo.sln` as the only solution.** Creating
+- [x] **Godot's own `Dlo.Game.sln` is deleted, leaving `dlo.sln` as the only solution.** Creating
       the C# solution writes one into the solution directory, and Godot refuses to start its
       editor plugin when two solutions there contain the `Dlo.Game` assembly — no build, no
       export, no C# in the editor. Godot finds `dlo.sln` by assembly name, not by filename.
-- [ ] **`dlo.sln` declares `ExportDebug` and `ExportRelease`**, with `Build.0` on `Dlo.Domain` and
+- [x] **`dlo.sln` declares `ExportDebug` and `ExportRelease`**, with `Build.0` on `Dlo.Domain` and
       `Dlo.Game` only. Godot builds exports with those configurations; `dotnet new sln` creates
       neither, and `dotnet build dlo.sln -c ExportRelease` fails with `MSB4126` until they exist.
       This lands here rather than in E18-01 because deleting Godot's solution is what moved the
       burden onto `dlo.sln` — and Arch §1.4 is explicit that export failures stay silent until
       they are expensive.
-- [ ] `project.godot` contains `physics/3d/physics_engine="Jolt Physics"` **as a literal line in
+- [x] `project.godot` contains `physics/3d/physics_engine="Jolt Physics"` **as a literal line in
       the file.** A fresh 4.7.2 project leaves the setting at `DEFAULT`, which names a resolution
       order rather than an engine — so "I checked and it looked fine" is not the criterion; the
       string being in the file is. Every number in Arch §8 assumes Jolt.
-- [ ] An empty scene runs from the editor *and* from `godot --headless --quit`.
+- [x] An empty scene runs from the editor *and* from `godot --headless --quit`.
 
 *The editor is pinned at 4.7.2-stable-mono. On the development machine it is at
 `D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`; the path is machine-local, and E14-09's README is
 where each machine records its own.*
 
 #### E14-04 · xUnit harness and the first real test
-**Depends:** E14-01, E14-02 · **Test:** L1
+**Depends:** E14-01, E14-02 · **Test:** L1 · **Status:** ✅ **Done**
 
-- [ ] `dotnet test tests/Dlo.Domain.Tests` runs green, and the invocation is in the README.
-- [ ] The suite completes in **under 5 s** (Arch §8) — measured now, while it is empty, so the
+- [x] `dotnet test tests/Dlo.Domain.Tests` runs green, and the invocation is in the README.
+- [x] The suite completes in **under 5 s** (Arch §8) — measured now, while it is empty, so the
       number has a baseline to regress from.
-- [ ] The first test asserts a real value on a real Domain type. `Assert.True(true)` is not a
+- [x] The first test asserts a real value on a real Domain type. `Assert.True(true)` is not a
       harness check, it is a harness lie.
 
 #### E14-05 · GdUnit4 harness
-**Depends:** E14-03 · **Test:** L2
+**Depends:** E14-03 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] A GdUnit4 test runs both in-editor and headless from the CLI; both invocations are in the
+- [x] A GdUnit4 test runs both in-editor and headless from the CLI; both invocations are in the
       README.
-- [ ] The first test makes one real assertion against a node.
+- [x] The first test makes one real assertion against a node.
 
 #### E14-06 · The architecture test
-**Depends:** E14-04 · **Test:** L1
+**Depends:** E14-04 · **Test:** L1 · **Status:** ✅ **Done**
 
-- [ ] Arch §10.5's assertion, verbatim: `Dlo.Domain` does not reference `GodotSharp`.
-- [ ] **Proved by breaking it** — add the reference, watch it go red, revert (Standards §8).
-- [ ] The PR template carries the check no test can do: a `grep` for a second `new ShiftDirector`
+- [x] Arch §10.5's assertion, verbatim: `Dlo.Domain` does not reference `GodotSharp`.
+- [x] **Proved by breaking it** — add the reference, watch it go red, revert (Standards §8).
+- [x] The PR template carries the check no test can do: a `grep` for a second `new ShiftDirector`
       or `new ShiftLedger` outside `SessionRoot` (Arch §3.2).
 
 #### E14-07 · CI workflow
-**Depends:** E14-04, E14-05, E14-06 · **Test:** build only
+**Depends:** E14-04, E14-05, E14-06 · **Test:** build only · **Status:** 🔶 **Partial**
 
-- [ ] On every push: restore, build, L1, L2, architecture test, `dotnet format --verify-no-changes`.
+- [x] On every push: restore, build, L1, L2, architecture test, `dotnet format --verify-no-changes`.
 - [ ] CI is green on an empty commit **and red on a deliberately failing test** — push one, watch
       it fail, revert. A pipeline nobody has seen fail is not known to work.
-- [ ] L3 and `ContentTool validate` are not here yet; they arrive with E0-09 and E13-06. L3 runs
-      on merge to main only, because it is minutes rather than seconds (Arch §10.6).
+      **Green half done; the red half is still owed** and `ci.yml` says so in its own header.
+      This is the cheapest open item in the repo: one scratch branch, one bad assert, one delete.
+- [x] L3 is wired in and runs **on merge to main only** (Arch §10.6), as its own job so a broken
+      L3 is unmistakable in the checks list. `ContentTool validate` is still absent and arrives
+      with E13-06.
 
 #### E14-08 · Git LFS and `.gitattributes`
-**Depends:** E14-01 · **Test:** build only
+**Depends:** E14-01 · **Test:** build only · **Status:** ✅ **Done**
 
-- [ ] `.png`, `.wav`, `.ogg`, `.glb` are LFS-tracked.
-- [ ] **`.tres` is provably not** — check one in and confirm the diff is readable text (Arch §7).
+- [x] `.png`, `.wav`, `.ogg`, `.glb` are LFS-tracked.
+- [x] **`.tres` is provably not** — check one in and confirm the diff is readable text (Arch §7).
       This is the criterion a careless wildcard breaks, and it breaks E13 with it.
-- [ ] Line endings are normalised, so a Windows clone and a Linux clone produce identical diffs.
-- [ ] The README describes what a clone that skipped `git lfs pull` looks like — E17's
+- [x] Line endings are normalised, so a Windows clone and a Linux clone produce identical diffs.
+- [x] The README describes what a clone that skipped `git lfs pull` looks like — E17's
       generated-placeholder decision makes that state rare enough to be baffling when it happens.
 
 *The `.gitignore` is already written for this project and is not part of this story.*
 
 #### E14-09 · README
-**Depends:** E14-04, E14-05, E14-07 · **Test:** build only
+**Depends:** E14-04, E14-05, E14-07 · **Test:** build only · **Status:** ✅ **Done**
 
-- [ ] A developer with nothing installed reaches "built, both suites green" in **under ten
+- [x] A developer with nothing installed reaches "built, both suites green" in **under ten
       minutes** following only this file — timed against someone who has not done it before.
-- [ ] Every test-level invocation is named: L1, L2, and L3 once it exists. Standards §8 makes a
+- [x] Every test-level invocation is named: L1, L2, and L3 once it exists. Standards §8 makes a
       missing invocation **an E14 defect**, which is why it has an owner rather than a convention.
-- [ ] Arch §1.4's gotchas are listed, including that C# hot reload does not pick up Domain changes
+- [x] Arch §1.4's gotchas are listed, including that C# hot reload does not pick up Domain changes
       and the fix is restarting the editor. That one costs an afternoon per developer who has to
       discover it alone.
-- [ ] **The pinned editor version is stated — 4.7.2-stable-mono — and the local install path is
+- [x] **The pinned editor version is stated — 4.7.2-stable-mono — and the local install path is
       where each machine records its own.** The development machine's is
       `D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`. A version mismatch between developers shows
       up as `project.godot` churn and export failures, not as a build error.
-- [ ] **Export templates for the pinned version must be installed**, and the README says so —
+- [x] **Export templates for the pinned version must be installed**, and the README says so —
       this is the step that is missing on the current machine (epics open item 10).
 
 ---
@@ -198,7 +237,7 @@ where each machine records its own.*
 *Host-authoritative from the first line of gameplay code, and an honest answer on Steam.*
 
 #### E0-01 · Steam C# path spike — **do this first**
-**Depends:** E14-03 · **Test:** spike · **Answers:** epics open item 1, Arch open item 1
+**Depends:** E14-03 · **Test:** spike · **Answers:** epics open item 1, Arch open item 1 · **Status:** ⛔ **Blocked**
 
 The largest open risk in the project, and the only one whose answer changes the shape of an epic.
 Timebox it, and write the finding down where someone can find it in six months.
@@ -221,20 +260,26 @@ Timebox it, and write the finding down where someone can find it in six months.
       negative finding, **what E12 becomes**, not merely that it is a problem.
 - [ ] Filed as the input to ADR 0004 (Arch §12).
 
+**Blocked on hardware, not on a decision.** `SteamTransport` is a stub that throws rather than
+falling back (asserted by `Steam_transport_refuses_rather_than_falling_back_to_enet`), and the
+seam around it is finished, so nothing else in the build is waiting on this. What it needs is
+Steam accounts on separate machines — this one has no Steam client installed. **Two peers on two
+machines unblocks ADR 0004**, and that is the version to run.
+
 *Blast radius is E12 and E18 only. The voice decision removed E7 from it (epics E7), which is the
 entire reason that decision was worth making.*
 
 #### E0-02 · `IGameTransport` and `EnetTransport`
-**Depends:** E14-03 · **Test:** L2
+**Depends:** E14-03 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] The interface is Arch §3.5's two methods. Not more — a transport that also knows about
+- [x] The interface is Arch §3.5's two methods. Not more — a transport that also knows about
       lobbies is E12 leaking downward.
-- [ ] ENet host and client both work locally.
-- [ ] **No file outside the two transport implementations names an ENet or a Steam type** — a grep
+- [x] ENet host and client both work locally.
+- [x] **No file outside the two transport implementations names an ENet or a Steam type** — a grep
       in review proves it, and it is what makes E0-03 a drop-in rather than a migration.
 
 #### E0-03 · `SteamTransport`
-**Depends:** E0-01, E0-02 · **Test:** L2 + one manual four-peer check
+**Depends:** E0-01, E0-02 · **Test:** L2 + one manual four-peer check · **Status:** ⛔ **Blocked**
 
 - [ ] Satisfies `IGameTransport` with no gameplay code change anywhere.
 - [ ] Transport is selected by configuration: **ENet is the development and test default; Steam is
@@ -243,18 +288,18 @@ entire reason that decision was worth making.*
       because L3 runs against ENet forever.
 
 #### E0-04 · Session lifecycle and the `SessionRoot` seam
-**Depends:** E0-02 · **Test:** L2, later L3
+**Depends:** E0-02 · **Test:** L2, later L3 · **Status:** ✅ **Done**
 
-- [ ] Host, join, leave and teardown all work over `IGameTransport`.
-- [ ] `SessionRoot._Ready` is **the only place in the codebase that constructs a domain system**,
+- [x] Host, join, leave and teardown all work over `IGameTransport`.
+- [x] `SessionRoot._Ready` is **the only place in the codebase that constructs a domain system**,
       behind exactly one `Multiplayer.IsServer()` branch (Arch §3.2).
-- [ ] `HostSession` receives its systems as constructor arguments so L1 can substitute stubs; it
+- [x] `HostSession` receives its systems as constructor arguments so L1 can substitute stubs; it
       never builds them internally.
-- [ ] `grep -rn "new ShiftDirector\|new ShiftLedger" src/` returns exactly one line, and that grep
+- [x] `grep -rn "new ShiftDirector\|new ShiftLedger" src/` returns exactly one line, and that grep
       is in the review checklist because no test can catch the second one.
 
 #### E0-05 · `MultiplayerSpawner` wrapper with a custom spawn function
-**Depends:** E0-04 · **Test:** L2
+**Depends:** E0-04 · **Test:** L2 · **Status:** ✅ **Done**
 
 - [x] Spawning takes a small explicit args struct, never a whole record — the payload is a
       deliberate decision at every call site (Arch §5.2). `NetworkSpawner.Payload` is `[key,
@@ -266,7 +311,7 @@ entire reason that decision was worth making.*
       registered in the same test.
 
 #### E0-06 · Replication classes — synchronizer configuration
-**Depends:** E0-04 · **Test:** L2
+**Depends:** E0-04 · **Test:** L2 · **Status:** ✅ **Done**
 
 The mechanism only. Parcels start using it in E2-05.
 
@@ -284,7 +329,7 @@ The mechanism only. Parcels start using it in E2-05.
       defaults" look identical in a diff.
 
 #### E0-07 · `LatencyPeer` development decorator
-**Depends:** E0-02 · **Test:** L2
+**Depends:** E0-02 · **Test:** L2 · **Status:** ✅ **Done**
 
 Vision §15's question says *over real internet*. Without this, the MVP answers an easier question
 than the one that matters — which makes this **required infrastructure, not a nicety** (Arch §3.5).
@@ -302,33 +347,33 @@ than the one that matters — which makes this **required infrastructure, not a 
 - [x] Carries Arch §3.5's `ponytail:` comment verbatim: ceiling *and* upgrade path.
 
 #### E0-08 · L3 harness feasibility spike
-**Depends:** E14-05, E0-02 · **Test:** spike · **Answers:** epics open item 5, Arch open item 4
+**Depends:** E14-05, E0-02 · **Test:** spike · **Answers:** epics open item 5, Arch open item 4 · **Status:** ✅ **Done**
 
-- [ ] A written answer to **four processes or four `SceneTree`s**, with a working proof of the one
+- [x] A written answer to **four processes or four `SceneTree`s**, with a working proof of the one
       chosen.
-- [ ] The wall-clock cost of a trivial four-peer connect test is measured — a suite that takes
+- [x] The wall-clock cost of a trivial four-peer connect test is measured — a suite that takes
       twenty minutes is a suite that gets skipped, and therefore is not a suite.
-- [ ] The chosen approach runs headless with no GPU on CI hardware, not only on a developer
+- [x] The chosen approach runs headless with no GPU on CI hardware, not only on a developer
       machine with a display attached.
 
 #### E0-09 · The `Dlo.Net.Tests` L3 harness
-**Depends:** E0-08, E0-04 · **Test:** L3
+**Depends:** E0-08, E0-04 · **Test:** L3 · **Status:** ✅ **Done**
 
-- [ ] Boots a headless host and three headless clients over `EnetTransport`.
-- [ ] Asserts an intent RPC arrives and a replicated value converges.
-- [ ] Tears down leaving **no orphaned processes**. A leaked peer poisons the next run and
+- [x] Boots a headless host and three headless clients over `EnetTransport`.
+- [x] Asserts an intent RPC arrives and a replicated value converges.
+- [x] Tears down leaving **no orphaned processes**. A leaked peer poisons the next run and
       presents as flakiness, which is how a suite loses its credibility.
-- [ ] A failure message names **which peer disagreed and what it held**. An L3 failure that says
+- [x] A failure message names **which peer disagreed and what it held**. An L3 failure that says
       only `Assert.Equal failed` costs an hour every single time it fires.
-- [ ] Wired into CI on merge to main (Arch §10.6).
+- [x] Wired into CI on merge to main (Arch §10.6).
 
 #### E0-10 · Disconnect and host-loss teardown
-**Depends:** E0-09 · **Test:** L3
+**Depends:** E0-09 · **Test:** L3 · **Status:** ✅ **Done**
 
-- [ ] A client disconnecting leaves the host and the remaining clients running, with no orphaned
+- [x] A client disconnecting leaves the host and the remaining clients running, with no orphaned
       nodes and no exceptions.
-- [ ] A host teardown ends every client's session cleanly.
-- [ ] Both asserted at L3, including that the survivors **keep functioning afterwards** — "did not
+- [x] A host teardown ends every client's session cleanly.
+- [x] Both asserted at L3, including that the survivors **keep functioning afterwards** — "did not
       crash" is not the assertion; "still works" is.
 
 *This story stops at "the session ended cleanly." The player-facing message and the return to
@@ -341,7 +386,7 @@ lobby are E12-05 — see the gap recorded about this split.*
 *A controller that is tight, in a world that is not.* **Gate 0 lives here.**
 
 #### E1-01 · Jolt joint stability spike — two-person carry
-**Depends:** E14-03 · **Test:** spike, leaving one L2 regression scene · **Answers:** epics open
+**Depends:** E14-03 · **Test:** spike, leaving one L2 regression scene · **Answers:** epics open · **Status:** ✅ **Done**
 item 4, Arch open item 3
 
 Do this before E1-04, not before E1-08. If heavy bodies on joints are unstable, the *grab* design
@@ -370,7 +415,7 @@ changes, not just the co-op carry.
       the carry visibly fine while invalidating every number above.
 
 #### E1-02 · First-person controller — move, look, jump, crouch
-**Depends:** E14-03 · **Test:** L2
+**Depends:** E14-03 · **Test:** L2 · **Status:** ✅ **Done**
 
 - [x] Move, look, jump and crouch are local and immediate on all four machines: **0 frames of
       network wait** (Arch §8), measured rather than assumed. Every test asserts the result of a
@@ -1057,27 +1102,60 @@ and that contaminates the one gate whose entire evidence is a single unprompted 
 
 ---
 
-## The first ten stories, in order
+## The first ten stories — all walked
 
-Sequencing comes from the dependency graph, and the graph's first walk is unambiguous. The only
-judgement call in it is that **two spikes come before the work they de-risk** — which is the whole
-point of a spike.
+Sequencing came from the dependency graph, and the graph's first walk was unambiguous. The only
+judgement call in it was that **two spikes come before the work they de-risk** — which is the
+whole point of a spike. Recorded as history now, because the walk is finished.
 
-| # | Story | Why here |
+| # | Story | Status |
 | ---: | :-- | :-- |
-| 1 | **E14-01** Solution scaffold | Nothing builds without it |
-| 2 | **E14-02** editorconfig + build props | Set the rules before there is code to grandfather |
-| 3 | **E14-03** Godot project, Jolt confirmed | Every Arch §8 number assumes Jolt |
-| 4 | **E14-04** xUnit + first real test | The L1 baseline is measured while the suite is empty |
-| 5 | **E0-01** Steam C# spike | **Week one, not negotiable.** It can reshape E12 |
-| 6 | **E14-06** Architecture test | Written before there is a violation to grandfather |
-| 7 | **E14-07** CI | A pipeline added later is a pipeline that starts red |
-| 8 | **E0-02** `IGameTransport` + ENet | Unblocks everything with a peer in it |
-| 9 | **E1-01** Jolt joint spike | Answers whether E1-04's grab design survives |
-| 10 | **E0-08** L3 harness feasibility | Decides the shape of every network test that follows |
+| 1 | **E14-01** Solution scaffold | ✅ |
+| 2 | **E14-02** editorconfig + build props | ✅ |
+| 3 | **E14-03** Godot project, Jolt confirmed | ✅ |
+| 4 | **E14-04** xUnit + first real test | ✅ |
+| 5 | **E0-01** Steam C# spike | ⛔ Blocked on Steam accounts on separate machines |
+| 6 | **E14-06** Architecture test | ✅ |
+| 7 | **E14-07** CI | 🔶 Green, never seen red |
+| 8 | **E0-02** `IGameTransport` + ENet | ✅ |
+| 9 | **E1-01** Jolt joint spike | ✅ Reported — found a different risk (arch §11) |
+| 10 | **E0-08** L3 harness feasibility | ✅ Four processes, measured |
 
-After that the graph forks cleanly: **E0-04 → E0-09 → the L3 chain** on one side, **E1-02 → E1-05 →
-Gate 0** on the other, and **E13-01/E17-01** running alongside from the moment `ParcelRecord` exists.
+Both forks past that walk are also done: **E0-04 → E0-09 → E0-10** closed the L3 chain, and
+**E1-02** landed the controller. E0-01 is the only one of the ten still open, and it is the only
+one whose blocker is a machine rather than a dependency.
+
+---
+
+## What to work on next
+
+Read off the dependency graph, not off preference. Everything here has its dependencies met
+**today**.
+
+**On the Gate 0 critical path** — this is the ordering that matters:
+
+| Story | Why it is next |
+| :-- | :-- |
+| **E1-03** Hands and IK | The only thing standing between E1-02 and the grab joint. Use Godot 4.7's `TwoBoneIK3D` / `FABRIK3D` **before** writing procedural arm code (`AGENTS.md` rung 3) |
+| **E1-04** The grab joint, host-side | E1-01 already chose the mechanism for you: a `Generic6DofJoint3D` linear spring at stiffness ≈ 100 × mass, **not** a `PinJoint3D` |
+| **E1-07** Carry and throw, then **E1-09** Stumble and trip | The last two feature stories Gate 0 needs |
+| **E15-04** Minimum settings | Needed *before* Gate 0, not after. Runs in parallel with all of the above |
+| **E19-01 → E19-02** Protocol, then Gate 0 instrument | No code. Both must exist before the session, and E19-01 blocks nothing else |
+
+**Unblocked and off the critical path**, worth picking up alongside:
+
+- **E2-01** `ParcelId`, `ParcelRecord`, `ParcelRegistry` — pure L1, needs only E14-04, and it is
+  the gate on all of E2, most of E3, and E13-01. The largest amount of downstream work unlocked
+  by one story in the whole document.
+- **E14-07's red run** — one scratch branch, one bad assert, one delete. Closes the last E14 box.
+- **E17-01** The asset specification — no dependencies beyond the scaffold.
+- **E12-01** Lobby — needs only E0-04, and Gate 1 needs it.
+- **E18-01 / E18-02** Export verification — unblocked, but **install the 4.7.2-stable-mono export
+  templates first**; the machine has 4.6 templates and this story fails until that is fixed. It is
+  also the one unverified leg of the `net10.0` override (arch §1.4).
+
+**Do not start** E0-03 (blocked on E0-01), E3-10 (a held fix, and Gate 2 has not reported), or
+anything in Tier 2 — Gate 1 can still invalidate it, which is rung 1 of `AGENTS.md`.
 
 ---
 

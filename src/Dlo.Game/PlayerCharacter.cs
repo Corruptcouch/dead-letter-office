@@ -10,9 +10,8 @@ namespace Dlo.Game;
 /// <param name="Jump">Whether jump was pressed this frame.</param>
 /// <param name="Crouch">Whether crouch is being held.</param>
 /// <remarks>
-/// Separating the intent from the reading of it is what makes E1-02 testable at all: a test
-/// drives the body directly and asserts what one frame did, with no input device, no window and
-/// no peer. It is also the shape E1-04's <c>RequestGrab</c> will need.
+/// Separating the intent from the reading of it is what makes E1-02 testable: a test drives the
+/// body directly and asserts what one frame did, with no input device, window or peer.
 /// </remarks>
 public readonly record struct MoveIntent(Vector2 Move, bool Jump, bool Crouch);
 
@@ -21,28 +20,15 @@ public readonly record struct MoveIntent(Vector2 Move, bool Jump, bool Crouch);
 /// (E1-02).
 /// </summary>
 /// <remarks>
+/// <b>The owning peer owns this node</b> (stories gap 1, settled 2026-08-25). Input is immediate
+/// because the body is <i>owned</i>, not predicted, which keeps arch §3.3's "grab is the only
+/// optimistic path" literally true; the host still owns every fact about the shift, and a position
+/// is not one. There is no host-side position validation — a cheating client is not in the threat
+/// model for a friends-and-invites-only game (vision §16).
 /// <para>
-/// <b>The owning peer owns this node</b>, settled 2026-08-25 as gap 1 in the stories document.
-/// Your own body is authoritative on your own machine and replicates outward, so input is
-/// immediate because the body is <i>owned</i> — not because it is predicted. That keeps arch
-/// §3.3's "grab is the only optimistic path in the build" literally true, and leaves §3.1 whole
-/// where it matters: the host still owns every fact about the shift — who holds what, which
-/// post is occupied, what the ledger records. A position is not a fact about the shift.
-/// </para>
-/// <para>
-/// <b>There is no host-side position validation, and that is a decision.</b> This is a
-/// four-player, friends-and-invites-only game (vision §16), so a cheating client is not in the
-/// threat model. If that ever changes the fix is a host validator plus a corrective RPC, and
-/// nothing here has to move for it.
-/// </para>
-/// <para>
-/// <b>No input damping. Anywhere.</b> Not on movement, not on the camera, not on look
-/// sensitivity, not "only while carrying something heavy". Arch §6.1 bans it and names it as
-/// the specific mistake that makes this game read as broken rather than funny: weight is
-/// expressed through the object — Jolt mass and a compliant joint, measured in E1-01 — and
-/// never through the controller. <see cref="Look"/> applies its delta whole and
-/// <see cref="Step"/> reaches full speed in one frame, and both are asserted rather than
-/// intended.
+/// <b>No input damping anywhere</b> — not movement, not camera, not "only while carrying something
+/// heavy". Arch §6.1 bans it and names it as what makes this game read as broken rather than funny:
+/// weight is expressed through the object, never through the controller.
 /// </para>
 /// </remarks>
 public partial class PlayerCharacter : CharacterBody3D
@@ -104,10 +90,9 @@ public partial class PlayerCharacter : CharacterBody3D
     /// </summary>
     /// <param name="delta">Raw look input — a mouse motion relative, typically.</param>
     /// <remarks>
-    /// <b>No smoothing and no acceleration.</b> Two calls with the same delta turn exactly twice
-    /// as far as one, which is the property the test asserts. Camera smoothing is the most
-    /// commonly added and most damaging form of the input damping arch §6.1 bans, because it
-    /// feels like polish while it is making the game unresponsive.
+    /// <b>No smoothing and no acceleration.</b> Two calls with the same delta turn exactly twice as
+    /// far as one, and the test asserts it. Camera smoothing is the most commonly added form of the
+    /// damping arch §6.1 bans, because it feels like polish while making the game unresponsive.
     /// </remarks>
     public void Look(Vector2 delta)
     {

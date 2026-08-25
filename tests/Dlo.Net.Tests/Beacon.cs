@@ -9,18 +9,14 @@ namespace Dlo.Net.Tests;
 /// downward, and an intent RPC that travels upward. E0-09 asserts both.
 /// </summary>
 /// <remarks>
+/// <b>Harness furniture, not gameplay.</b> It lives in the test project because there is no
+/// gameplay reason for it yet — real replication classes are E0-06 and E2-05, real intents start
+/// with E1-04. What it proves is the plumbing under both: a <see cref="MultiplayerSynchronizer"/>
+/// configured in code moves a value host → three clients, and an <c>AnyPeer</c> RPC gets back.
 /// <para>
-/// <b>This is harness furniture, not gameplay.</b> It lives in the test project rather than
-/// in <c>Dlo.Game</c> because there is no gameplay reason for it to exist yet — the real
-/// replication classes are E0-06 and E2-05, and the real intents start with E1-04's
-/// <c>RequestGrab</c>. What it proves is the plumbing underneath both: that a
-/// <see cref="MultiplayerSynchronizer"/> configured in code moves a value from host to three
-/// clients over <c>EnetTransport</c>, and that an <c>AnyPeer</c> RPC gets back.
-/// </para>
-/// <para>
-/// <b>The sentinel is deliberately not 0 or 1.</b> A client that never received anything
-/// holds the default, and a default that happens to equal the expected value is a test that
-/// passes for the wrong reason forever (standards §8).
+/// <b>The sentinel is deliberately not 0 or 1.</b> A client that received nothing holds the
+/// default, and a default equal to the expected value passes for the wrong reason forever
+/// (standards §8).
 /// </para>
 /// </remarks>
 public partial class Beacon : Node

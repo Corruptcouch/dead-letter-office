@@ -325,6 +325,29 @@ Write the things the code cannot say:
 XML docs (`///`) are required on public Domain types and members (§1). Use `<see cref="..."/>`
 so the references resolve and the Game layer gets working hover text.
 
+**Length is part of the rule.** A doc comment is not the place to re-argue a design document, and
+a file whose comments outweigh its code is a design document in the wrong file — it will drift
+from the real one, and the reader who needs it will be reading the stale copy. Budget: a
+`<summary>` is one or two sentences; a `<remarks>` is one short paragraph, and a second `<para>`
+only when the first cannot carry it.
+
+- **Cite, do not restate.** The vision, the architecture, the epics and the stories are the
+  authorities on why. `(arch §3.4)` is the whole citation — the paragraph explaining arch §3.4
+  belongs in arch §3.4. When code and a design doc disagree, one sentence of divergence plus a
+  citation beats a retelling.
+- **No project history in source.** Dated corrections, "blocked on, in order", what a future
+  story will fill in, what a spike cost: that is the stories document's job. Code says what is
+  true now. *(An audit of the shipped stories removed 240 comment lines. Two of them were false:
+  `Main.cs` said E0-04 would replace it with `SessionRoot` — E0-04 shipped `SessionRoot` as an
+  autoload beside it — and `IGameTransport` cited a recorded gap that was never written.)*
+- **No doc that restates its own identifier.** `/// <summary>Move forward.</summary>` above
+  `Forward = "move_forward"` is the noise this section opens by banning; a doc comment is not
+  exempt from it.
+- **Keep the note that stops a plausible wrong change.** The `-0.1f` downward bias that keeps
+  `IsOnFloor()` true on a ramp, the clamp just inside ±90°, reading packet metadata before taking
+  the packet, why `Sleeping` waits an hour. These are the comments worth having, and they are all
+  one or two lines.
+
 ---
 
 ## 8. Every change leaves a runnable check
@@ -491,6 +514,8 @@ Before opening a PR:
 - [ ] New content type ships with its `ContentTool` validation rule, and nothing that should be
       data was authored in code.
 - [ ] XML docs on new Domain public members.
+- [ ] **No comment re-argues a design document, and no file's comments outweigh its code** (§7).
+      A `<remarks>` past one short paragraph plus one `<para>` is the signal; the fix is a citation.
 - [ ] New behaviour has a test named after the behaviour, and it fails if you revert the change.
 - [ ] Anything asymmetric-information-shaped has a *negative* test.
 - [ ] Every `ponytail:` names a ceiling and an upgrade path.

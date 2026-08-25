@@ -12,33 +12,20 @@ namespace Dlo.Net.Tests;
 /// exit code. The harness in <see cref="FourPeerSession"/> launches four of these.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <b>Four processes, not four <c>SceneTree</c>s</b> — E0-08's finding, and the reason this
-/// file is a whole peer rather than a quarter of one. Both shapes work and both are fast;
-/// what decides it is that a Godot process has exactly one physics world, so four in-process
-/// peers would put four copies of every parcel into it, colliding with each other. Measured
-/// 2026-08-24: two bodies in two sibling subtrees of one process shoved each other apart, so
-/// the shared world is a fact rather than a worry. E1-06 (two clients grabbing one parcel)
-/// and E2-09 (belt → grab → throw → tube) are the tests that would otherwise have been lies.
-/// The full finding, including what in-process would have been cheaper at, is on
-/// <see cref="FourPeerSession"/>.
-/// </para>
+/// <b>Four processes, not four <c>SceneTree</c>s</b> — E0-08's finding: a Godot process has exactly
+/// one physics world, so four in-process peers would put four copies of every parcel into it. The
+/// measurements are in arch §11 and the reasoning is on <see cref="FourPeerSession"/>.
 /// <para>
 /// <b>Every run is identical up to convergence; only the ending differs</b> (E0-10). All three
-/// <see cref="Scenario"/>s connect four peers, publish one value and collect three reports.
-/// What happens after that is the scenario: nothing (<c>converge</c>), a client leaving
-/// (<c>departure</c>), or the host tearing down (<c>hostloss</c>). That split is what the small
-/// state machine below buys — a failure before convergence belongs to E0-09 and a failure after
-/// it to E0-10, and nobody has to work out which.
+/// <see cref="Scenario"/>s connect four peers, publish one value and collect three reports; what
+/// follows is the scenario — nothing, a client leaving, or the host tearing down. That is what the
+/// state machine below buys: a failure before convergence is E0-09's, after it E0-10's.
 /// </para>
 /// <para>
-/// <b>The peers run this project, not <c>src/Dlo.Game</c>.</b> That keeps harness-only code —
-/// <see cref="Beacon"/>, this scenario — out of the shipping build, and it is the same trade
-/// tests/Dlo.Game.Tests already made at L2. The ceiling is the same too, and worth stating:
-/// this builds <see cref="SessionRoot"/> as an ordinary node, so it does not cover
-/// SessionRoot's registration as an autoload (arch §6.2) or <c>Main.tscn</c>. What it does
-/// cover is every line inside SessionRoot, EnetTransport and HostSession, across four real
-/// processes and a real socket.
+/// <b>The peers run this project, not <c>src/Dlo.Game</c></b>, which keeps harness-only code out of
+/// the shipping build. The ceiling: <see cref="SessionRoot"/> is built as an ordinary node, so
+/// its autoload registration (arch §6.2) and <c>Main.tscn</c> are not covered — everything inside
+/// SessionRoot, EnetTransport and HostSession is, across four real processes and a real socket.
 /// </para>
 /// </remarks>
 public partial class Peer : Node

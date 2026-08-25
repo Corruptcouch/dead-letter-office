@@ -10,10 +10,8 @@ namespace Dlo.Game.Net;
 /// seed (arch §4.2).
 /// </summary>
 /// <remarks>
-/// The seed is the entire point: it is reported at session start so a bug report can carry it
-/// and the same shift can be regenerated. Deliberately not <c>GD.Randi()</c> and not
-/// <c>Random.Shared</c> — neither can be replayed, and standards §0 bans both below the Game
-/// layer for exactly that reason.
+/// The seed is the point: it is reported at session start so a bug report can carry it and the
+/// same shift can be regenerated. Not <c>GD.Randi()</c> or <c>Random.Shared</c> — neither replays.
 /// </remarks>
 /// <param name="seed">The seed to replay. Record it anywhere a bug might be reported from.</param>
 public sealed class SeededRandom(int seed) : IRandom

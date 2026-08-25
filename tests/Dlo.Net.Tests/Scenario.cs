@@ -5,16 +5,12 @@ namespace Dlo.Net.Tests;
 /// the harness, echoed back in the peer's report, and compile-time shared by both halves.
 /// </summary>
 /// <remarks>
+/// One value selects one scripted ending, and every peer in a run gets the same one. The scenarios
+/// differ only in what happens <i>after</i> convergence, so a failure before it is E0-09's and a
+/// failure after it is E0-10's.
 /// <para>
-/// One value selects one scripted ending, and every peer in a run gets the same one. The
-/// scenarios differ only in what happens <i>after</i> the four peers have converged — up to
-/// that point every run is identical, which is deliberate: it means a failure before
-/// convergence is E0-09's, and a failure after it is E0-10's, without having to work out which.
-/// </para>
-/// <para>
-/// <b>These are strings rather than an enum</b> because they cross a process boundary as a
-/// command-line switch and come back in a text report. An enum would be converted to a string
-/// twice and back twice, to buy nothing that a shared constant does not already buy.
+/// <b>Strings rather than an enum</b> because they cross a process boundary as a command-line
+/// switch and come back in a text report. An enum would be converted twice each way to buy nothing.
 /// </para>
 /// </remarks>
 public static class Scenario

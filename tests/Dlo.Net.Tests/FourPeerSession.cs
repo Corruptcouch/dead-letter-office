@@ -6,12 +6,11 @@ using System.Linq;
 using System.Text;
 
 // One four-peer run at a time, for the whole assembly. EnetTransport.Port is a fixed 27377
-// (E0-02, deliberately: a host and three clients on one machine all want the same number), so
-// two runs cannot coexist - and xUnit parallelises across test classes by default, which is
-// exactly what a second scenario introduced. Measured 2026-08-25, before this line existed:
-// three runs at once produced clients that connected to another scenario's host and converged
-// on its value, then every peer timed out at 20 s. It reads as a network fault and it is a
-// scheduling one, which is why it is worth the sentence.
+// (E0-02: a host and three clients on one machine all want the same number), so two runs cannot
+// coexist - and xUnit parallelises across test classes by default. Measured 2026-08-25, before
+// this line existed: three concurrent runs produced clients that connected to another scenario's
+// host and converged on its value, then every peer timed out at 20 s. It reads as a network fault
+// and it is a scheduling one, which is why it is worth the sentence.
 //
 // The alternative - a port per run - would mean making a shipping constant configurable for
 // the benefit of the test suite. Serialising three runs that cost about a second each is the
@@ -26,43 +25,18 @@ namespace Dlo.Net.Tests;
 /// because the run is the expensive part and the assertions are not.
 /// </summary>
 /// <remarks>
+/// <b>E0-08's finding — four processes, not four <c>SceneTree</c>s.</b> Both shapes were built and
+/// measured (arch §11 carries the numbers); cost did not decide it, because both are far inside
+/// arch §10.1's budget. What decides it is that <b>one process has exactly one physics world</b>:
+/// two rigid bodies in sibling subtrees shoved each other apart within sixty frames, so four
+/// in-process peers would hold four copies of every parcel in one simulation. Arch §10.4's
+/// physics-bearing assertions — grab contention (E1-06), identity through tube transit (E2-09),
+/// the ledger agreeing across peers — would all have been quietly wrong. Statics, autoloads and
+/// <c>ProjectSettings</c> are shared for the same reason, and host authority is a claim about
+/// separate machines.
 /// <para>
-/// <b>E0-08's finding — four processes, not four <c>SceneTree</c>s.</b> Both were built and
-/// measured on 2026-08-24 against Godot 4.7.2-stable-mono, and the question is not the one it
-/// looks like:
-/// </para>
-/// <list type="bullet">
-/// <item><description>
-/// <b>Cost is not the deciding factor.</b> A trivial four-peer connect-and-exchange took
-/// <b>435 ms</b> in one process and <b>663 ms</b> in four, three runs each, near-identical
-/// spreads. Four Godot boots cost about 200 ms each and they overlap. Arch §10.1 budgets
-/// "minutes" for L3 and E0-08 worried about twenty; neither shape is anywhere near either
-/// number, so the fear that decided this story turned out to be unfounded on both branches.
-/// </description></item>
-/// <item><description>
-/// <b>One process has exactly one physics world, and that is what decides it.</b> Two rigid
-/// bodies half a metre apart in two sibling subtrees of one process shoved each other apart
-/// within sixty frames — a shared world, measured rather than assumed. Four in-process peers
-/// would therefore hold four copies of every parcel in one simulation, colliding. Arch §10.4's
-/// three physics-bearing L3 assertions — grab contention (E1-06), identity through tube
-/// transit (E2-09), the ledger agreeing across peers — would all have been quietly wrong.
-/// </description></item>
-/// <item><description>
-/// <b>Statics and autoloads are shared too</b>, for the same reason: one process is one CLR
-/// and one Godot. Four peers would share one <c>SessionRoot</c> autoload, one
-/// <c>ProjectSettings</c> and one set of statics. Host authority is a claim about separate
-/// machines, and a harness that cannot separate them cannot test it.
-/// </description></item>
-/// <item><description>
-/// <b>In-process is not worthless</b> — it is 230 ms cheaper and can inspect all four peers
-/// in one debugger. If a future test is purely about RPC routing with no physics and no
-/// global state, it is a legitimate shape. It is not the shape for this suite.
-/// </description></item>
-/// </list>
-/// <para>
-/// <b>Headless with no GPU is proven, not assumed</b> (E0-08's third criterion): every
-/// measurement above was taken with <c>--headless</c>, and CI already installs the same
-/// pinned Godot and runs the L2 suite headless on <c>ubuntu-latest</c>.
+/// In-process remains legitimate for a test that is purely about RPC routing, with no physics and
+/// no global state. It is not the shape for this suite.
 /// </para>
 /// </remarks>
 public abstract class FourPeerSession : IDisposable

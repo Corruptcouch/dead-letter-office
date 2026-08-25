@@ -12,27 +12,22 @@ namespace Dlo.Game.Tests;
 /// the check that keeps that measurement true.
 /// </summary>
 /// <remarks>
+/// <b>What the spike found, in one line:</b> nothing exploded, jittered or tunnelled at any mass to
+/// 500 kg at Jolt's default solver settings — but a <i>rigid</i> joint to a kinematic hand expresses
+/// no weight at all, because the hand is immovable and the box simply follows it. Weight has to come
+/// from joint compliance, and the only compliance Jolt honours is a
+/// <see cref="Generic6DofJoint3D"/> linear spring: <c>PinJoint3D.impulse_clamp</c> is unimplemented
+/// and logged as ignored. The full finding, with the envelope and the release-speed consequence for
+/// E1-08, is in arch §11.
 /// <para>
-/// <b>What the spike found, in one line:</b> two joints holding a heavy box at Jolt's default
-/// solver settings never exploded, jittered or tunnelled at any mass up to 500 kg — but a
-/// <i>rigid</i> joint to a kinematic hand expresses no weight at all, because the hand is
-/// immovable and the box simply follows it. Weight has to come from joint compliance, and under
-/// Jolt the only compliance that works is a <see cref="Generic6DofJoint3D"/> linear spring.
-/// <c>PinJoint3D</c>'s <c>impulse_clamp</c> — the obvious knob — is not implemented: Jolt logs
-/// "Pin joint impulse clamp is not supported when using Jolt Physics" and ignores it.
+/// <b>The solver settings are asserted here</b> because every number in that finding is relative to
+/// <c>velocity_steps = 10</c>, <c>position_steps = 2</c> at 60 Hz. Nothing sets them, so this
+/// asserts Jolt's defaults — if somebody tunes the solver to fix an unrelated problem, the envelope
+/// stops being the envelope, and that is the change this file exists to catch.
 /// </para>
 /// <para>
-/// <b>Why the solver settings are asserted here.</b> Every number in the finding is relative to
-/// <c>velocity_steps = 10</c>, <c>position_steps = 2</c> at 60 Hz. Those are Jolt's defaults in
-/// 4.7.2 and nothing sets them, so this suite asserts the defaults rather than a stored value —
-/// the same shape as <c>Unset_configuration_selects_enet_for_development</c>. If somebody tunes
-/// the solver to fix an unrelated problem, the envelope stops being the envelope, and that is
-/// exactly the change this file exists to catch.
-/// </para>
-/// <para>
-/// <b>This is a physics-behaviour check, so it costs seconds rather than milliseconds</b>
-/// (standards §8 budgets seconds for L2). It is the one place in the suite where real time has
-/// to pass, because the failure it looks for is a divergence that takes frames to develop.
+/// A physics-behaviour check, so it costs seconds rather than milliseconds (standards §8 budgets
+/// seconds for L2): the failure it looks for takes frames to develop.
 /// </para>
 /// </remarks>
 [TestSuite]
