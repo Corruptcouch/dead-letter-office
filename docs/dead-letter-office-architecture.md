@@ -861,7 +861,7 @@ they are answered by measurement or a spike, not by a decision.**
 
 | # | Item | Blocks | Needed by |
 | ---: | :-- | :-- | :-- |
-| 1 | **Prove the GodotSteam C# path** — bindings fork, `SteamMultiplayerPeer` without channels, at 4 peers (§3.5). **Blast radius reduced:** E7 no longer depends on this | E12, shipping | **E0, week one.** Not negotiable |
+| 1 | **Prove the GodotSteam C# path** — bindings fork, `SteamMultiplayerPeer` without channels, at 4 peers (§3.5). **Blast radius reduced:** E7 no longer depends on this. **Cost corrected 2026-08-25:** it needs no paid app id — 480 (Spacewar) initialises the real API — but it does need four Steam accounts on four machines, and two peers on two machines answers most of it | E12, shipping | **E0, week one.** Not negotiable |
 | 2 | Measure real replication cost against §8's budget with a full belt | §3.4's three-class design | Before E4 conveyors are considered done |
 | 3 | Jolt joint stability for two-person carry of a heavy body | E1 | First E1 spike |
 | 5 | Select the pure-C# Opus package — managed only, no native binary, all three desktop targets (§6.5) | E7 | With E7's first story |

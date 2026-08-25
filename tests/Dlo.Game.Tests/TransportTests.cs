@@ -68,6 +68,20 @@ public class TransportTests
         AssertThat(GameTransport.ForCurrentBuild()).IsInstanceOf<EnetTransport>();
     }
 
+    [TestCase]
+    public void Unset_configuration_selects_the_public_test_app_id()
+    {
+        // Same shape as the transport default above, and the same reason: nothing in this
+        // project sets the app id, so this asserts the fallback rather than a stored value.
+        AssertThat(SteamTransport.AppId).IsEqual(SteamTransport.TestAppId);
+
+        // Asserted separately, and not as a nicety. The setting is read through a Variant, so
+        // a mistyped setting name or a conversion that quietly failed would both hand back 0 -
+        // and 0 is a valid-looking app id that makes SteamAPI_Init fail with a message about
+        // Steam not running, which is the wrong thing to go and debug (standards §8).
+        AssertThat(SteamTransport.AppId).IsGreater(0u);
+    }
+
     private static bool ClientIsPending(MultiplayerPeer client) =>
         client.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connecting;
 }

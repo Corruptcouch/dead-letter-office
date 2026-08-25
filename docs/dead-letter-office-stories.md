@@ -204,7 +204,16 @@ The largest open risk in the project, and the only one whose answer changes the 
 Timebox it, and write the finding down where someone can find it in six months.
 
 - [ ] Four peers connect over the C# `SteamMultiplayerPeer` path and exchange an RPC in both
-      directions, against a real Steam app id.
+      directions, against **app id 480 — Spacewar, Valve's public test app**. It initialises the
+      real Steamworks API and gives real SteamID64s and real P2P over Valve's relay, which is
+      everything this spike asks about; nothing here is a question about *our* entitlement. A
+      dedicated app id costs the Steam Direct fee and partner onboarding, and **waiting for
+      that is what kept this story unstarted through week one** (corrected 2026-08-25).
+- [ ] **Budget four Steam accounts on four machines.** This, not the app id, is what the story
+      actually costs: Steam runs one client per machine, one account at a time. **Two peers on
+      two machines still answers most of it** — whether the bindings work and against which
+      fork — and that is the half ADR 0004 needs. Split the story rather than waiting for four
+      boxes.
 - [ ] A client disconnect and a host teardown are both survived.
 - [ ] The finding names **the exact fork and commit** of the bindings that worked, and states
       whether the missing channels implementation matters at our packet volume and shape.

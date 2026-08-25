@@ -154,6 +154,23 @@ for you:
 installed under `tests/Dlo.Game.Tests/addons/`. That is not installed here and nothing needs
 it; the test explorer covers the same ground without adding a tracked dependency.)*
 
+### Steam — not running yet
+
+Nothing in the build talks to Steam: `SteamTransport` is a stub that throws, and E0-01 is the
+spike that decides whether the C# path is usable at all. When you come to run it:
+
+- **The app id is 480 — Spacewar, Valve's public test app.** It is the default in
+  `SteamTransport`, it costs nothing, and it initialises the real Steamworks API. A dedicated
+  app id needs the Steam Direct fee and partner onboarding, and is not wanted yet.
+- **Create a `steam_appid.txt` containing `480`** beside whatever launches the game. It is
+  git-ignored on purpose and **must never be exported** — a shipped one overrides what Steam
+  says the app is, silently.
+- **Swapping in a real app id later is export config, not code.** Set
+  `dlo/network/steam_app_id.steam` alongside the `steam` feature on the export preset, the same
+  way the transport itself is selected. Dev builds keep using 480.
+- **The real cost is four Steam accounts on four machines** — one client per machine, one
+  account at a time. Two peers on two machines still answers whether the bindings work.
+
 ### L3 — four headless peers
 
 `dotnet test tests/Dlo.Net.Tests` boots **four separate Godot processes** — one host, three

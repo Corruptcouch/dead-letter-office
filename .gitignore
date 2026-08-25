@@ -25,6 +25,14 @@
 # see the note below.
 export_credentials.cfg
 
+# The Steamworks SDK reads its app id from Steam when Steam launches the game, and
+# from this file beside the executable when anything else does - the editor, a test
+# run, a double-click. E0-01 needs one containing 480 (Spacewar, Valve's public test
+# app; see SteamTransport). It is ignored rather than committed for one reason: it
+# must NEVER be exported. A shipped steam_appid.txt overrides what Steam says the app
+# is, and that failure is silent right up until it is a launch-day incident.
+steam_appid.txt
+
 # NOT ignored, deliberately:
 #
 #   *.import           Each asset's UID and import settings — pixel-art filter
