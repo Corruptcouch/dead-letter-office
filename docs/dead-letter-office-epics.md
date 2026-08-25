@@ -923,13 +923,15 @@ decision pass itself surfaced (rows 6 and 7), and two toolchain items that arriv
 | ---: | :-- | :-- | :-- | :-- |
 | 1 | **Does the GodotSteam C# path work at 4 peers?** Bindings lag the extension; the `SteamMultiplayerPeer` C# port is seven commits and has no channels (Arch §3.5). **Blast radius is now E12 + E18 only** — the voice decision removed E7 from it | E12, E18, shipping | Tech | **E0, week one** |
 | 2 | **Select the pure-C# Opus package** — managed only, no native binary, all three desktop targets. The project's one new runtime dependency, so it needs an AGENTS.md rung-4 justification in review | E7 | Tech | E7's first story |
-| 3 | Measure replication cost against Arch §8 with a full belt | E4 sign-off | Tech | Before E4 is done |
 | 6 | **Employee name source when Steam is unavailable.** Names derive from the Steam persona (E5), but ENet dev builds, CI and the L3 suite have no persona. Needs a fallback generator — and since the report and the PA both print these names, "Player 2" is a tone regression | E5, E7's PA lines, E8's report | Tech + Owner | With E5 |
 | 7 | **Does the Former Personnel wall need a cap?** Records are append-only and never expire, so the file grows without bound and the wall eventually cannot be read. Probably a roll-off or a "notable employees" filter | E11's wall | Tech + Owner | With E11 |
 | 8 | The four gate decisions themselves | Everything downstream of each gate | Owner + E19 | Per gate |
+| 11 | **Arch §8's "≤ 40 awake parcel bodies" and "< 60 KB/s host upstream" cannot both hold**, and the measurement that was supposed to confirm them found which one gives. Measured 2026-08-25 (E2-10, arch §11): forty awake bodies cost **63–70 KB/s** to three clients at 30 Hz, and the transform encoding is already *better* than §3.4 assumed, so this is not waste to be trimmed. 60 KB/s buys **~35 awake bodies at 30 Hz, or all 40 at 20 Hz** — and there may be a third answer nobody has costed, such as a distance or interest filter. **`Railed` is exonerated**: a belt backed up to its end costs less ongoing than one loose box | E5's volume curve, E6, E4 sign-off | Owner + Tech | Before E5 sets mail volume |
 | 9 | **Install 4.7.2 export templates.** The machine has 4.6 templates only; the first export fails until this is done. Not a decision — a task, recorded so it is not discovered at export time | E18 | Tech | Before E18-01 |
 
-*Item 5 — the headless multi-peer harness — is answered: **four processes**, built and measured
+*Item 3 — replication cost against Arch §8 — is answered, and the answer opened row 11 above:
+measured 2026-08-25 (E2-10, arch §11), the belt is free and forty awake bodies are not.
+Item 5 — the headless multi-peer harness — is answered: **four processes**, built and measured
 on 2026-08-24 (E0-08, E0-09, arch §11). **Item 4 — Jolt joint stability — is answered too**, on
 2026-08-25 (E1-01, arch §11): the instability it was written to find does not exist at any mass
 to 500 kg, but rigid joints turn out to express no weight and Jolt does not implement

@@ -373,7 +373,7 @@ almost nothing:
 | Class | When | Replicated | Cost |
 | :-- | :-- | :-- | :-- |
 | **Railed** | Riding a conveyor or in a tube | `(beltId, distanceAlong, lane)` once on entry | ~6 bytes, once |
-| **Dynamic** | Loose, thrown, held, falling | Transform, `UnreliableOrdered` | Full rate |
+| **Dynamic** | Loose, thrown, held, falling | Transform, `Unreliable` | Full rate |
 | **Sleeping** | At rest, Jolt reports asleep | Nothing. Final transform on sleep | Zero |
 
 A railed parcel is kinematic on a known spline at a known speed, so clients extrapolate it
@@ -388,6 +388,10 @@ Two consequences worth stating:
 - **Tube transit does not replicate a body.** A parcel in a pneumatic tube is
   `(tubeId, eta)`. Its Godot node may be freed entirely; the domain record persists (§5.1).
 - **`MultiplayerSynchronizer.replication_interval` is set per class**, not globally.
+- **The transform stream is `Unreliable`, not `UnreliableOrdered`** — corrected 2026-08-25 by
+  measurement (E2-05). Godot's synchronizer sends sync state unsequenced and drops stale
+  packets by their stamp instead, so ordering holds above the transport. §11 carries the
+  finding; what must never happen is a transform on the *reliable* path.
 
 ### 3.5 Transport, and the one real project risk
 
@@ -876,12 +880,11 @@ they are answered by measurement or a spike, not by a decision.**
 | # | Item | Blocks | Needed by |
 | ---: | :-- | :-- | :-- |
 | 1 | **Prove the GodotSteam C# path** — bindings fork, `SteamMultiplayerPeer` without channels, at 4 peers (§3.5). **Blast radius reduced:** E7 no longer depends on this. **Cost corrected 2026-08-25:** it needs no paid app id — 480 (Spacewar) initialises the real API — but it does need four Steam accounts on four machines, and two peers on two machines answers most of it | E12, shipping | **E0, week one.** Not negotiable |
-| 2 | Measure real replication cost against §8's budget with a full belt | §3.4's three-class design | Before E4 conveyors are considered done |
 | 5 | Select the pure-C# Opus package — managed only, no native binary, all three desktop targets (§6.5) | E7 | With E7's first story |
 
-*Items 3 and 4 — Jolt joint stability and the headless multi-peer harness — are answered and
-have moved to the table below. The remaining numbers are left where they are, because the
-stories document cites them by number.*
+*Items 2, 3 and 4 — replication cost, Jolt joint stability and the headless multi-peer harness —
+are answered and have moved to the table below. The remaining numbers are left where they are,
+because the stories document cites them by number.*
 
 **Resolved in v0.2** — kept visible so the reasoning is not re-litigated:
 
@@ -898,6 +901,8 @@ stories document cites them by number.*
 | Can a weaker grip refuse a lift? (E1-08) | **No, and it is not close.** A linear spring's force grows without bound with stretch, so splitting stiffness between carriers only buys sag: a lone carrier on a two-person 50 kg box at half stiffness still lifted it to within 21 cm of their hand. Jolt offers no cap — `PARAM_LINEAR_SPRING` is stiffness, damping and equilibrium, and `impulse_clamp` was already found unimplemented. **An under-crewed load is therefore frozen**, and the code says so rather than dressing a flag as physics. Each grip stays at the measured 100 × mass; dividing it would leave the envelope `JointStabilityTests` guards |
 | What does "clients hold a visual-only attachment" (§3.3) actually require? | **A node that is not the replicated body.** Predicting by moving the parcel body writes the property replication owns, and the parcel then flips between the predicted hand and the authority's position on every packet — about a metre, several times a second, measured across the L3 harness. `Carryable.Visual` is a child that is never replicated; the predictor offsets it and eases it home over 15 frames, so the body is never disturbed and no freeze is needed. Rollback convergence measured at **0.018 m**, against 0.36–1.24 m before the change |
 | Must a client simulate a parcel it does not own? | **No, and doing both is a bug.** A `RigidBody3D` that is locally simulated *and* transform-replicated fights itself: position is sent, velocity is not, so a client's copy accelerates downward and settles about **0.25 m below** the host's. It presents as intermittently failing assertions rather than as anything that looks like a fault. The L3 harness freezes parcels on non-authority peers; **§3.4's three replication classes (E2-05) are the real answer**, and this is the concrete reason that story is not optional |
+| Real replication cost against §8's budget, with a full belt (was item 2) | **The belt is free; forty awake bodies are not.** Measured 2026-08-25 (E2-10) over ENet's own `SentData` counter, host plus three clients, `tests/Dlo.Net.Tests` scenario `budget`: **idle 0.9–1.3 KB/s** (the harness beacon and ENet keep-alive alone) · **a belt backed up to its end with 34 railed parcels: 0.9–1.2 KB/s, at or below the idle noise floor** · **40 awake `Dynamic` bodies on top: 63–70 KB/s**, against §8's **60 KB/s gameplay budget**. Three runs. **`Railed` is exactly as cheap as §3.4 claims** — 34 parcels ongoing cost less than one loose box, and putting all 34 on the belt is a one-off burst of ~3.3 KB, about **32 bytes per parcel per client** against the section's "~6 bytes" (a `Vector3` is 16 bytes encoded, plus the node id, the length prefix and UDP/ENet framing). **`Dynamic` is the class that misses**, at **17–19 bytes per body per client per tick** — *better* than the 28 §3.4 assumed, so the budget is missed on body count and rate, not on waste. **§8's own two numbers cannot both hold**: 40 × 3 × 30 Hz at any plausible transform encoding is 60–100 KB/s. The arithmetic that follows is a fact and not a proposal — 60 KB/s buys ~35 awake bodies at 30 Hz, or all 40 at 20 Hz — and **which of the two numbers gives is the owner's call, not this measurement's** (E2-10). E4-10 is the same measurement from the belt's side and should cite this rather than retake it |
+| Is a `MultiplayerSynchronizer`'s streamed state really `UnreliableOrdered` (§3.4)? | **No — it is plain `Unreliable`, and the ordering lives above the transport.** Measured 2026-08-25 (E2-05) by counting received packets by mode on a client wrapped in `LatencyPeer`: over a window where the only thing moving was a falling parcel, **zero reliable packets and a stream of unreliable ones**. Godot's `SceneReplicationInterface::_send_sync` sets `TRANSFER_MODE_UNRELIABLE`; each sync packet carries a time stamp and a receiving synchronizer drops stale ones, so the *property* §3.4 wants holds and the mode it names does not. **Nothing to fix** — there is no API to make a synchronizer send ordered, and the outcome is the same — but §3.4's table should read `Unreliable` so the next person to measure it does not report a bug. The assertion that matters, and the one the L3 suite holds, is that the transform stream is **never** reliable: a transform on the reliable path retransmits and head-of-line blocks, and that is what the property silently becoming `OnChange` would produce |
 | Does `Dlo.Domain` stay on `netstandard2.1`? | **No — `net10.0`, same as everything else.** It had no consumer outside this repo, and it was what forced the `IsExternalInit` declaration for `readonly record struct`. That workaround is deleted rather than documented |
 
 ---

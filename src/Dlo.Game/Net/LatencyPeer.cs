@@ -39,6 +39,7 @@ public partial class LatencyPeer : MultiplayerPeerExtension
 
     private readonly MultiplayerPeer _inner;
     private readonly List<Held> _queue = [];
+    private readonly int[] _taken = new int[3];
     private readonly RandomNumberGenerator _jitterSource = new();
     private readonly int _delayMs;
     private readonly int _jitterMs;
@@ -105,6 +106,14 @@ public partial class LatencyPeer : MultiplayerPeerExtension
     /// <summary>How many packets are being held back but not yet delivered.</summary>
     public int InFlight => _queue.Count;
 
+    /// <summary>How many packets this peer has taken in under <paramref name="mode"/>.</summary>
+    /// <remarks>
+    /// It already reads the mode off every packet to keep ordered traffic ordered; counting them
+    /// costs nothing more, and it is how E2-05 asserts that a <c>Dynamic</c> transform really
+    /// arrives <c>UnreliableOrdered</c> rather than taking the engine's word for it.
+    /// </remarks>
+    public int Taken(TransferModeEnum mode) => _taken[(int)mode];
+
     /// <inheritdoc/>
     public override void _Poll()
     {
@@ -130,6 +139,7 @@ public partial class LatencyPeer : MultiplayerPeerExtension
                 _lastOrderedRelease = release;
             }
 
+            _taken[(int)mode]++;
             _queue.Add(new Held(bytes, from, channel, mode, release));
         }
     }

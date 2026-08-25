@@ -32,6 +32,7 @@ public class ParcelPoolTests
             first.AngularVelocity = new Vector3(2, 2, 2);
             first.GlobalPosition = new Vector3(40, 40, 40);
             first.Freeze = true;
+            first.Rail = new Vector3(3, 4.5f, 1);
             first.Visual.Position = new Vector3(5, 5, 5);
 
             pool.Release(first);
@@ -50,6 +51,11 @@ public class ParcelPoolTests
             AssertVector(second.GlobalPosition).IsEqual(Vector3.Zero);
             AssertBool(second.Freeze).IsFalse();
             AssertVector(second.Visual.Position).IsEqual(Vector3.Zero);
+
+            // The rail tuple included (E2-05). A body that remembered it would be adopted by
+            // whatever belt it was last on, in whatever room that belt is in.
+            AssertVector(second.Rail).IsEqual(Vector3.Zero);
+            AssertThat(second.Class).IsEqual(Dlo.Game.Net.ReplicationClass.Dynamic);
         }
         finally
         {

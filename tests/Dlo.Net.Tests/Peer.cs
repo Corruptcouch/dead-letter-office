@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
 using Dlo.Game;
 using Dlo.Game.Carry;
+using Dlo.Game.Facility;
 using Dlo.Game.Net;
 using Godot;
 
@@ -73,6 +75,40 @@ public partial class Peer : Node
     /// <summary>How far from the parcel each carrier stands. Inside <c>GrabRules.Reach</c>.</summary>
     private const float CarrierRadius = 1.0f;
 
+    /// <summary>E2-05's belt: short, so every peer's parcel reaches the end and waits there.</summary>
+    /// <remarks>
+    /// <b>The end of the belt is what makes the assertion tight.</b> Four peers extrapolating the
+    /// same spline from the same tuple still start their clocks a hop apart, so mid-ride they are
+    /// a few centimetres out by construction. Parked against the end they are not: the belt has a
+    /// last metre and everybody's arithmetic stops at it.
+    /// </remarks>
+    private const float BeltLength = 2.0f;
+
+    /// <summary>Metres per second the belt runs at, in <see cref="Scenario.Railed"/>.</summary>
+    private const float BeltSpeed = 1.2f;
+
+    /// <summary>How high the belt sits, so knocking a parcel off it is a fall (E2-05).</summary>
+    private const float BeltHeight = 1.5f;
+
+    /// <summary>Seconds the parcel rides before it is knocked off. Twice the belt's own length.</summary>
+    private const double RideSeconds = 3.0;
+
+    /// <summary>Arch §8's ceiling on awake parcel bodies, which is what E2-10 measures at.</summary>
+    private const int AwakeBodies = 40;
+
+    /// <summary>Parcels on E2-10's belt: two lanes packed back from the end at <c>Spacing</c>.</summary>
+    private const int RailedBodies = 34;
+
+    /// <summary>E2-10's belt, long enough that <see cref="RailedBodies"/> fills both its lanes.</summary>
+    private const float YardBeltLength = 12.0f;
+
+    /// <summary>Seconds each of E2-10's four readings is taken over.</summary>
+    /// <remarks>
+    /// Long enough that one late packet cannot move the answer, short enough that four of them
+    /// plus the settle fit inside the peers' 20 s deadline with room to spare.
+    /// </remarks>
+    private const double WindowSeconds = 1.5;
+
     private string _role = HostRole;
     private string _scenario = Scenario.Converge;
     private SessionRoot _session = null!;
@@ -85,6 +121,28 @@ public partial class Peer : Node
     private int _id;
     private string _teardown = PeerReport.Live;
     private bool _finished;
+
+    // E2-10 only.
+    private readonly List<Carryable> _yard = [];
+    private int _stage;
+    private double _windowFrom = double.NaN;
+    private double _idleRate = -1;
+    private double _entryRate = -1;
+    private double _railedRate = -1;
+    private double _awakeRate = -1;
+
+    // E2-05 only.
+    private Conveyor? _belt;
+    private ReplicationMeter? _rideMeter;
+    private Vector3 _railAt;
+    private float _railDistance = -1.0f;
+    private double _rideFrom = double.NaN;
+    private int _rideChanges = -1;
+    private int _rideBytes = -1;
+    private int _fallReliable = -1;
+    private int _fallStream = -1;
+    private double _looseAt = double.NaN;
+    private double _quietAt = double.NaN;
 
     // E1-06 only.
     private Carryable? _parcel;
@@ -122,8 +180,8 @@ public partial class Peer : Node
 
     private string ParcelPath => _parcel?.GetPath().ToString() ?? string.Empty;
 
-    /// <summary>Reports naming <see cref="Beacon.Aftermath"/> — the survivors, host-side.</summary>
-    private int Echoes => _beacon.Reports.Count(report => report.Value == Beacon.Aftermath);
+    /// <summary>How many clients have echoed <paramref name="value"/> back, host-side.</summary>
+    private int Echoes(int value) => _beacon.Reports.Count(report => report.Value == value);
 
     /// <summary>This peer's connection state, with Godot's stand-in read as what it means.</summary>
     /// <remarks>
@@ -161,6 +219,24 @@ public partial class Peer : Node
             // lets an RPC name it. E2-01 replaces the path with a ParcelId, and E2-04 replaces this
             // hand-built node with a spawn.
             BuildParcel();
+            BuildCarriers();
+        }
+
+        if (_scenario == Scenario.Budget)
+        {
+            BuildYard();
+        }
+
+        if (_scenario == Scenario.Railed)
+        {
+            // LatencyPeer at zero delay, purely so a client can say how its packets arrived
+            // (E0-07 built the decorator; this is the first run that puts it on a real socket).
+            ProjectSettings.SetSetting(LatencyPeer.EnabledSetting, true);
+            ProjectSettings.SetSetting(LatencyPeer.DelaySetting, 0);
+            ProjectSettings.SetSetting(LatencyPeer.JitterSetting, 0);
+
+            BuildParcel();
+            BuildBelt();
         }
 
         if (IsHost)
@@ -209,6 +285,7 @@ public partial class Peer : Node
         }
 
         WatchParcel();
+        WatchBelt();
 
         if (IsHost)
         {
@@ -255,7 +332,7 @@ public partial class Peer : Node
                     _beacon.Beat = Beacon.Aftermath;
                 }
 
-                if (Echoes == ClientCount - 1)
+                if (Echoes(Beacon.Aftermath) == ClientCount - 1)
                 {
                     Finish(PeerReport.Ok, 0);
                 }
@@ -286,6 +363,14 @@ public partial class Peer : Node
 
             case Scenario.HostLoss:
                 EndSession(PeerReport.TornDown);
+                break;
+
+            case Scenario.Railed:
+                TickRailedHost();
+                break;
+
+            case Scenario.Budget:
+                TickBudgetHost();
                 break;
 
             default:
@@ -395,6 +480,24 @@ public partial class Peer : Node
                 // away - which is exactly the failure the scenario is looking for.
                 break;
 
+            case Scenario.Railed:
+                TickRailedClient();
+                break;
+
+            case Scenario.Budget:
+                // Passive. A client's only job here is to be a real destination for the host's
+                // upstream, which is the number under measurement.
+                if (_beacon.Beat == Beacon.Weighed && !HasAnswered)
+                {
+                    Answer(Beacon.Weighed);
+                }
+                else if (HasAnswered && _elapsed - _answeredAt > FlushSeconds)
+                {
+                    Finish(PeerReport.Ok, 0);
+                }
+
+                break;
+
             default:
                 if (_elapsed - _sentAt > FlushSeconds)
                 {
@@ -403,6 +506,284 @@ public partial class Peer : Node
 
                 break;
         }
+    }
+
+    /// <summary>
+    /// The host's side of <see cref="Scenario.Railed"/>: ride, knock off, settle, go quiet.
+    /// </summary>
+    private void TickRailedHost()
+    {
+        switch (_beacon.Beat)
+        {
+            case Beacon.Sentinel:
+                // On the belt. From here the host says nothing further about where the parcel is;
+                // every peer computes it from the tuple this one line writes (arch §3.4).
+                _belt!.Accept(_parcel!, lane: 0, distance: 0.0f);
+                _rideMeter = new ReplicationMeter(_parcel!.Synchronizer);
+                _rideFrom = _elapsed;
+                _beacon.Beat = Beacon.Riding;
+                break;
+
+            case Beacon.Riding when _elapsed - _rideFrom > RideSeconds:
+                // What the ride cost, read off the instrument before anything else happens to it.
+                _rideChanges = _rideMeter!.Changes;
+                _rideBytes = _rideMeter.Bytes;
+
+                _belt!.Release(_parcel!);
+                _beacon.Beat = Beacon.Loose;
+                break;
+
+            case Beacon.Loose when _parcel!.Class == ReplicationClass.Sleeping:
+                _beacon.Beat = Beacon.Asleep;
+                break;
+
+            case Beacon.Asleep when Echoes(Beacon.Asleep) == ClientCount:
+                Finish(PeerReport.Ok, 0);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /// <summary>
+    /// A client's side of <see cref="Scenario.Railed"/>: watch, and report what it was told.
+    /// </summary>
+    /// <remarks>
+    /// It is deliberately passive. Everything it knows about the parcel arrived as replication,
+    /// so its final position is evidence about what the host sent rather than about what it did.
+    /// </remarks>
+    private void TickRailedClient()
+    {
+        if (_beacon.Beat == Beacon.Loose && double.IsNaN(_looseAt))
+        {
+            _looseAt = _elapsed;
+        }
+
+        // The fall window opens a flush AFTER the parcel came off the belt, not at the moment it
+        // did. Clearing the rail tuple is a watched change and travels reliably, and it shares a
+        // poll with the phase value that announces it - so a window starting on the announcement
+        // would count that one reliable packet about half the time, which is a flaky test rather
+        // than a finding.
+        if (!double.IsNaN(_looseAt) && _fallReliable < 0 && _elapsed - _looseAt > FlushSeconds
+            && Wire is { } opening)
+        {
+            _fallReliable = opening.Taken(MultiplayerPeer.TransferModeEnum.Reliable);
+            _fallStream = opening.Taken(MultiplayerPeer.TransferModeEnum.Unreliable);
+        }
+
+        if (_beacon.Beat != Beacon.Asleep)
+        {
+            return;
+        }
+
+        if (double.IsNaN(_quietAt))
+        {
+            _quietAt = _elapsed;
+            return;
+        }
+
+        if (!HasAnswered)
+        {
+            // One flush window after the host went quiet, so the final transform it owes has had
+            // time to land before this peer states where it thinks the parcel is.
+            if (_elapsed - _quietAt > FlushSeconds)
+            {
+                if (Wire is { } closing && _fallReliable >= 0)
+                {
+                    _fallReliable = closing.Taken(MultiplayerPeer.TransferModeEnum.Reliable) - _fallReliable;
+                    _fallStream = closing.Taken(MultiplayerPeer.TransferModeEnum.Unreliable) - _fallStream;
+                }
+
+                Answer(Beacon.Asleep);
+            }
+        }
+        else if (_elapsed - _answeredAt > FlushSeconds)
+        {
+            Finish(PeerReport.Ok, 0);
+        }
+    }
+
+    /// <summary>
+    /// The host's side of <see cref="Scenario.Budget"/>: three readings, taken as load is added.
+    /// </summary>
+    /// <remarks>
+    /// <b>Three, not one</b>, because E2-10 requires that an over-budget finding name which
+    /// replication class is misbehaving. One number would say the facility is too expensive and
+    /// nothing about which part of arch §3.4 is not paying for itself.
+    /// </remarks>
+    private void TickBudgetHost()
+    {
+        switch (_stage)
+        {
+            case 0 when _yard.TrueForAll(p => p.Class == ReplicationClass.Sleeping):
+                // Everything on the floor and asleep. The baseline is the beacon and the
+                // session's own keep-alive, and nothing else.
+                Open();
+                break;
+
+            case 1 when Elapsed(WindowSeconds):
+                _idleRate = Close();
+                Load();
+                Open();
+                break;
+
+            case 2 when Elapsed(WindowSeconds):
+                // The entry burst, kept separate rather than folded in. Arch §3.4 prices a railed
+                // parcel at "~6 bytes, once", and a single window starting at Accept would charge
+                // that once to every second of the reading and make the belt look expensive.
+                _entryRate = Close();
+                Open();
+                break;
+
+            case 3 when Elapsed(WindowSeconds):
+                _railedRate = Close();
+                Wake();
+                Open();
+                break;
+
+            case 4 when Elapsed(WindowSeconds):
+                _awakeRate = Close();
+                _beacon.Beat = Beacon.Weighed;
+                _stage = 5;
+                break;
+
+            case 5 when Echoes(Beacon.Weighed) == ClientCount:
+                Finish(PeerReport.Ok, 0);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /// <summary>Zeroes the wire counter and starts the next reading.</summary>
+    private void Open()
+    {
+        Sent();
+        _windowFrom = _elapsed;
+        _stage++;
+    }
+
+    /// <summary>Closes a reading and returns it in bytes per second.</summary>
+    private double Close() => Sent() / Math.Max(_elapsed - _windowFrom, double.Epsilon);
+
+    private bool Elapsed(double seconds) => _elapsed - _windowFrom > seconds;
+
+    /// <summary>
+    /// Bytes ENet has put on the wire since this was last called, and zero thereafter.
+    /// </summary>
+    /// <remarks>
+    /// ENet's own counter rather than anything this harness adds up, because arch §8's budget is
+    /// about what leaves the machine — UDP headers, acknowledgements and all — and a tally kept
+    /// above the transport would report the payload and call it the cost.
+    /// </remarks>
+    private double Sent() => Multiplayer.MultiplayerPeer is ENetMultiplayerPeer enet
+        ? enet.Host.PopStatistic(ENetConnection.HostStatistic.SentData)
+        : 0.0;
+
+    /// <summary>Fills both lanes of the belt, backed up from its end.</summary>
+    private void Load()
+    {
+        for (var i = 0; i < RailedBodies; i++)
+        {
+            // Packed against the end rather than fed in at the start, so the belt is already
+            // backed up when it is measured. That is the state vision §2 says a shift lives in.
+            _belt!.Accept(_yard[i], lane: i % 2, distance: YardBeltLength - (i / 2 * _belt.Spacing));
+        }
+    }
+
+    /// <summary>Wakes arch §8's forty, and keeps them awake for the length of the reading.</summary>
+    private void Wake()
+    {
+        foreach (var parcel in _yard.Skip(RailedBodies))
+        {
+            // CanSleep off, because the budget is about bodies that are awake: a box that dozed
+            // off halfway through the window would be measured in the cheap class it is not in.
+            parcel.CanSleep = false;
+            parcel.Sleeping = false;
+        }
+    }
+
+    /// <summary>
+    /// Builds E2-10's yard: one belt, and enough parcels to fill it and arch §8's awake budget.
+    /// </summary>
+    /// <remarks>
+    /// Built identically on every peer, at identical paths, for the reason everything else here
+    /// is: nothing spawns yet (E2-04 owns that), and a synchronizer needs the same node on both
+    /// ends of the wire.
+    /// </remarks>
+    private void BuildYard()
+    {
+        var floor = new StaticBody3D { Name = "Floor", Position = new Vector3(0, -0.5f, 0) };
+        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(60, 1, 60) } });
+        AddChild(floor);
+
+        _belt = new Conveyor
+        {
+            Name = "Belt",
+            BeltId = 5,
+            Speed = BeltSpeed,
+            Lanes = 2,
+            Length = YardBeltLength,
+            Position = new Vector3(-20, BeltHeight, 0),
+        };
+        AddChild(_belt);
+
+        for (var i = 0; i < RailedBodies + AwakeBodies; i++)
+        {
+            var parcel = new Carryable
+            {
+                Name = $"Parcel{i}",
+                Mass = 8.0f,
+
+                // A grid on the floor, resting rather than dropped: the settle before the first
+                // reading is dead time in a 20 s deadline, and a box placed at rest sleeps in the
+                // half-second Jolt asks for instead of bouncing first.
+                Position = new Vector3(((i % 10) - 5) * 1.0f, 0.201f, ((i / 10) - 4) * 1.0f),
+            };
+            parcel.AddChild(new CollisionShape3D
+            {
+                Shape = new BoxShape3D { Size = new Vector3(0.4f, 0.4f, 0.4f) },
+            });
+
+            AddChild(parcel);
+            _yard.Add(parcel);
+        }
+    }
+
+    /// <summary>This peer's lag decorator, or <c>null</c> if it is not wrapped in one.</summary>
+    private LatencyPeer? Wire => Multiplayer.MultiplayerPeer as LatencyPeer;
+
+    /// <summary>Tracks where the parcel was the last time this peer saw it on a belt (E2-05).</summary>
+    private void WatchBelt()
+    {
+        if (_belt?.DistanceOf(_parcel!) is not { } distance)
+        {
+            return;
+        }
+
+        _railAt = _parcel!.GlobalPosition;
+        _railDistance = distance;
+    }
+
+    /// <summary>
+    /// Builds E2-05's belt, identically on every peer and at the same path as every other peer's.
+    /// </summary>
+    private void BuildBelt()
+    {
+        _belt = new Conveyor
+        {
+            Name = "Belt",
+            BeltId = 5,
+            Speed = BeltSpeed,
+            Lanes = 1,
+            Length = BeltLength,
+            Position = new Vector3(0, BeltHeight, 0),
+        };
+
+        AddChild(_belt);
+        _parcel!.Position = new Vector3(0, BeltHeight, 0);
     }
 
     /// <summary>Tells the host how the contest went for this peer, and stamps when it did.</summary>
@@ -494,6 +875,19 @@ public partial class Peer : Node
         $"{PeerReport.Holder}={Holder()}",
         $"{PeerReport.Parcel}={Where(_parcel)}",
         $"{PeerReport.Jump}={_biggestJump.ToString("F3", CultureInfo.InvariantCulture)}",
+        $"{PeerReport.Rail}={Where3(_railAt)}",
+        $"{PeerReport.RailDistance}={_railDistance.ToString("F3", CultureInfo.InvariantCulture)}",
+        $"{PeerReport.Class}={_parcel?.Class.ToString() ?? PeerReport.None}",
+        $"{PeerReport.RideChanges}={_rideChanges}",
+        $"{PeerReport.RideBytes}={_rideBytes}",
+        $"{PeerReport.FallReliable}={_fallReliable}",
+        $"{PeerReport.FallStream}={_fallStream}",
+        $"{PeerReport.IdleRate}={_idleRate.ToString("F0", CultureInfo.InvariantCulture)}",
+        $"{PeerReport.EntryRate}={_entryRate.ToString("F0", CultureInfo.InvariantCulture)}",
+        $"{PeerReport.RailedRate}={_railedRate.ToString("F0", CultureInfo.InvariantCulture)}",
+        $"{PeerReport.AwakeRate}={_awakeRate.ToString("F0", CultureInfo.InvariantCulture)}",
+        $"{PeerReport.RailedBodies}={(_belt?.Carrying ?? 0)}",
+        $"{PeerReport.AwakeBodies}={_yard.Count(p => !p.CanSleep)}",
         $"{PeerReport.Elapsed}={_elapsed.ToString("F2", CultureInfo.InvariantCulture)}");
 
     private string Heard() =>
@@ -505,11 +899,9 @@ public partial class Peer : Node
     /// Builds the contested parcel and this peer's carrier, identically on every peer.
     /// </summary>
     /// <remarks>
-    /// <b>The transform synchronizer is harness furniture</b>, like <see cref="Beacon"/> itself.
-    /// Parcels get their real replication classes in E2-05; this one carries a plain host-owned
-    /// transform so a losing client can be seen to converge on the host's truth rather than on a
-    /// guess of its own. Without it, E1-06's "the loser sees it move toward the winner" would have
-    /// nothing to observe, because nothing would be sending the winner's version.
+    /// <b>The parcel brings its own replication now</b> (E2-05): <see cref="Carryable"/> builds its
+    /// synchronizer, picks its class from its own state, and freezes itself on every peer that
+    /// does not own it. This method builds a box on a floor and nothing else.
     /// </remarks>
     private void BuildParcel()
     {
@@ -535,34 +927,17 @@ public partial class Peer : Node
             Shape = new BoxShape3D { Size = new Vector3(0.6f, 0.6f, 0.6f) },
         });
 
-        var transform = new NodePath(".:position");
-        var config = new SceneReplicationConfig();
-        config.AddProperty(transform);
-        config.PropertySetReplicationMode(transform, SceneReplicationConfig.ReplicationMode.Always);
-
-        _parcel.AddChild(new MultiplayerSynchronizer
-        {
-            Name = "Sync",
-            ReplicationConfig = config,
-            RootPath = "..",
-            ReplicationInterval = 0.05,
-        });
-
-        // Frozen on everyone but the host, and this is the fix for a real artefact rather than a
-        // convenience. A RigidBody3D that is BOTH locally simulated and transform-replicated fights
-        // itself: the synchronizer sends position but not velocity, so a client's copy keeps
-        // accelerating downward, gets snapped back every replication interval, and settles about
-        // 25 cm below the host's - measured 2026-08-25, and it showed up as two intermittently
-        // failing assertions rather than as anything that looked like a bug.
-        //
-        // E2-05 is what answers this properly: arch §3.4's three replication classes decide what a
-        // client does with a parcel it does not own. Until then the harness says the plain thing -
-        // a peer that is not the authority does not simulate the body.
-        _parcel.Freeze = !IsHost;
-
         AddChild(_parcel);
         _lastParcelAt = _parcel.Position;
+    }
 
+    /// <summary>
+    /// Builds this peer's carrier and the predictor it reaches through. <see cref="Scenario.Contention"/>
+    /// only — <see cref="Scenario.Railed"/> wants the box and the floor without four bodies
+    /// standing where the belt is.
+    /// </summary>
+    private void BuildCarriers()
+    {
         // A carrier each, standing in a different place, all of them inside reach.
         //
         // Different places matter: with everyone co-located the loser's own hand and the winner's
@@ -663,13 +1038,14 @@ public partial class Peer : Node
         return found;
     }
 
-    private static string Where(Node3D? node) => node is null
-        ? PeerReport.None
-        : string.Join(
-            '|',
-            node.Position.X.ToString("F3", CultureInfo.InvariantCulture),
-            node.Position.Y.ToString("F3", CultureInfo.InvariantCulture),
-            node.Position.Z.ToString("F3", CultureInfo.InvariantCulture));
+    private static string Where(Node3D? node) =>
+        node is null ? PeerReport.None : Where3(node.Position);
+
+    private static string Where3(Vector3 at) => string.Join(
+        '|',
+        at.X.ToString("F3", CultureInfo.InvariantCulture),
+        at.Y.ToString("F3", CultureInfo.InvariantCulture),
+        at.Z.ToString("F3", CultureInfo.InvariantCulture));
 
     /// <summary>Reads one <c>--switch=value</c> off the command line, or its default.</summary>
     private static string Argument(string prefix, string fallback)

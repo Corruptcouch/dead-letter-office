@@ -57,6 +57,24 @@ public partial class Beacon : Node
     /// </remarks>
     public const int Lost = 17;
 
+    /// <summary>The host has put the parcel on the belt (E2-05).</summary>
+    /// <remarks>
+    /// The three values below are phases rather than facts to converge on: they sequence one
+    /// run through arch §3.4's three classes so that every peer samples the same moment. Each is
+    /// distinct from every other value here for the reason <see cref="Sentinel"/> is distinct
+    /// from the default — a phase mistaken for another would sample the wrong one silently.
+    /// </remarks>
+    public const int Riding = 19;
+
+    /// <summary>The host has knocked the parcel off the belt and it is falling (E2-05).</summary>
+    public const int Loose = 23;
+
+    /// <summary>The host's parcel has come to rest and demoted itself to sleeping (E2-05).</summary>
+    public const int Asleep = 29;
+
+    /// <summary>The host has taken all three of E2-10's readings and is done measuring.</summary>
+    public const int Weighed = 31;
+
     /// <summary>
     /// The host-owned replicated value. <c>[Export]</c> is not decoration — a
     /// <see cref="SceneReplicationConfig"/> can only name properties Godot can see.

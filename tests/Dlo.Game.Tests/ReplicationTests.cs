@@ -64,27 +64,6 @@ public class ReplicationTests
     }
 
     [TestCase]
-    public void Only_railed_watches_the_rail_tuple()
-    {
-        var sync = AutoFree(new MultiplayerSynchronizer())!;
-
-        // OnChange, not Always: the tuple is sent once when the parcel joins the belt and then
-        // never again, because nothing about it changes. That is the "~6 bytes, once" of arch
-        // §3.4, and it is the whole reason the design survives its own keystone.
-        Replication.Apply(sync, ReplicationClass.Railed, _transform, _rail);
-        AssertThat(sync.ReplicationConfig.PropertyGetReplicationMode(_rail))
-            .IsEqual(SceneReplicationConfig.ReplicationMode.OnChange);
-
-        Replication.Apply(sync, ReplicationClass.Dynamic, _transform, _rail);
-        AssertThat(sync.ReplicationConfig.PropertyGetReplicationMode(_rail))
-            .IsEqual(SceneReplicationConfig.ReplicationMode.Never);
-
-        Replication.Apply(sync, ReplicationClass.Sleeping, _transform, _rail);
-        AssertThat(sync.ReplicationConfig.PropertyGetReplicationMode(_rail))
-            .IsEqual(SceneReplicationConfig.ReplicationMode.Never);
-    }
-
-    [TestCase]
     public void A_node_is_promoted_and_demoted_without_being_respawned()
     {
         var node = AutoFree(new Node3D { Name = "Parcel" })!;

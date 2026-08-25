@@ -20,18 +20,27 @@ namespace Dlo.Domain;
 /// not in <see cref="ParcelSpawnArgs"/>, and a client mispredicting a locked grab is the
 /// intended behaviour (arch §3.3).
 /// </param>
-// ponytail: identity and the physical facts, and nothing else.
-// Ceiling: no manifest, address or destination, so nothing here can be routed or judged, and no
-// tamper state, so nothing can be opened. There is also no write path - a record is registered
-// once and never changes.
-// Upgrade: E2-03 brings the manifest model, and E2-07's tamper state is the first thing that has
-// to change after registration; that is the story that gives the registry an update method.
+/// <param name="Manifest">
+/// The paperwork, or <c>null</c> for a parcel that arrived without any — which is a dead letter
+/// and not an error (arch §4.5).
+/// </param>
+/// <remarks>
+/// <b>The manifest is host-only, harder than the lock is.</b> It is not in
+/// <see cref="ParcelSpawnArgs"/> and it never reaches a client that has not scanned the box: that
+/// is the whole of arch §5.3, and E3-06 is the story that enforces it at the point of sending.
+/// </remarks>
+// ponytail: identity, the physical facts and the paperwork, and nothing else.
+// Ceiling: no tamper state, so nothing can be opened, and no ActualContents, so a declaration
+// cannot be wrong. There is also no write path - a record is registered once and never changes.
+// Upgrade: E2-07's tamper state is the first thing that has to change after registration; that is
+// the story that gives the registry an update method.
 public sealed record ParcelRecord(
     ParcelId Id,
     byte Archetype,
     byte Size,
     byte Condition,
-    bool IsLocked)
+    bool IsLocked,
+    Manifest? Manifest = null)
 {
     /// <summary>The smallest <see cref="Size"/> that no single carrier can lift (E1-08).</summary>
     public const byte TwoPersonSize = 3;

@@ -42,6 +42,18 @@ public static class Scenario
     public const string Contention = "contention";
 
     /// <summary>
+    /// E2-05. One parcel rides a belt, is knocked off it, falls and settles — and every peer has
+    /// to end up agreeing where it is, having been sent almost nothing.
+    /// </summary>
+    public const string Railed = "railed";
+
+    /// <summary>
+    /// E2-10. Arch §8's worst case, built and metered: forty awake parcel bodies and a belt
+    /// backed up to its end, measured against the 60 KB/s the host is allowed.
+    /// </summary>
+    public const string Budget = "budget";
+
+    /// <summary>
     /// The client that leaves in <see cref="Departure"/>. Named here rather than on either
     /// side so the peer deciding to leave and the test asserting who left cannot disagree.
     /// </summary>

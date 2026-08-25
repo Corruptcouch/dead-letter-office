@@ -395,6 +395,11 @@ public partial class GrabDirector : Node
         }
 
         load.Freeze = false;
+
+        // A box somebody is carrying is not at rest, and Jolt does not always work that out from
+        // a joint alone. Waking it is also what demotes it out of Sleeping (E2-05): a parcel
+        // that stayed asleep would be carried without replicating a single transform.
+        load.Sleeping = false;
         load.GlobalTransform = CarryPose(load, held);
 
         // Every grip is E1-01's reference configuration exactly: one spring per carrier at

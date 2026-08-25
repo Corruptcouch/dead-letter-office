@@ -192,7 +192,12 @@ public class ContentSetTests
             + $"id = {id}\nname = \"{name}\"\nmass = {mass.ToString(System.Globalization.CultureInfo.InvariantCulture)}\n"
             + $"size = {size}\ndeclared_contents = \"{contents}\"\n");
 
-    private static bool Load(
+    /// <summary>
+    /// Loads a content set out of strings rather than files. <c>internal</c> so that
+    /// <see cref="RoutingRulesTests"/>'s matrix runs over the same loader this suite checks,
+    /// rather than over a hand-built dictionary of the shape it hopes the loader produces.
+    /// </summary>
+    internal static bool Load(
         out ContentSet? set,
         out IReadOnlyList<ContentProblem> problems,
         ContentFile[]? archetypes = null,

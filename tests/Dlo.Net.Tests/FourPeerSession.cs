@@ -338,3 +338,14 @@ public sealed class HostLossRun() : FourPeerSession(Scenario.HostLoss);
 /// E1-06's run: three clients reach for one parcel at once and exactly one may end up with it.
 /// </summary>
 public sealed class ContentionRun() : FourPeerSession(Scenario.Contention);
+
+/// <summary>
+/// E2-05's run: one parcel through all three replication classes, and four peers that have to
+/// agree where it ended up.
+/// </summary>
+public sealed class RailedRun() : FourPeerSession(Scenario.Railed);
+
+/// <summary>
+/// E2-10's run: arch §8's worst case built and metered — forty awake bodies and a full belt.
+/// </summary>
+public sealed class BudgetRun() : FourPeerSession(Scenario.Budget);

@@ -29,10 +29,17 @@ public sealed class ParcelRegistry
     /// <param name="size">How big it is, which is also what decides its carrier count.</param>
     /// <param name="condition">Visible wear.</param>
     /// <param name="isLocked">Whether policy forbids picking it up. Host-only.</param>
+    /// <param name="manifest">Its paperwork, or <c>null</c> for a parcel that came without any.</param>
     /// <returns>The stored record, carrying the id it was just given.</returns>
-    public ParcelRecord Register(byte archetype, byte size, byte condition, bool isLocked = false)
+    public ParcelRecord Register(
+        byte archetype,
+        byte size,
+        byte condition,
+        bool isLocked = false,
+        Manifest? manifest = null)
     {
-        var record = new ParcelRecord(new ParcelId(_nextId++), archetype, size, condition, isLocked);
+        var record = new ParcelRecord(
+            new ParcelId(_nextId++), archetype, size, condition, isLocked, manifest);
         _records[record.Id] = record;
         return record;
     }

@@ -20,6 +20,18 @@ public partial class Carryable : RigidBody3D
     public const string Group = "parcels";
 
     /// <summary>
+    /// Frames the final transform of <see cref="Net.ReplicationClass.Sleeping"/> is given to leave.
+    /// </summary>
+    /// <remarks>
+    /// Two, not one: a synchronizer sends during the multiplayer poll, and nothing here knows
+    /// whether that poll runs before or after this node's callback. One frame would land the send
+    /// half the time, which is the worst of the three available numbers.
+    /// </remarks>
+    private const int FlushFrames = 2;
+
+    private int _flush;
+
+    /// <summary>
     /// Which parcel this node is showing. <c>default</c> means it is not a parcel at all — a
     /// prop, or a test fixture — and the host treats it as unlocked and one-person.
     /// </summary>
@@ -76,6 +88,16 @@ public partial class Carryable : RigidBody3D
     public MultiplayerSynchronizer Synchronizer { get; private set; } = null!;
 
     /// <summary>
+    /// Which of arch §3.4's three classes this parcel is replicating in (E2-05).
+    /// </summary>
+    /// <remarks>
+    /// <b>A decision about what to send, so only the authority makes it.</b> A peer that does not
+    /// own the body keeps the one configuration that can receive all three and reports
+    /// <see cref="Net.ReplicationClass.Dynamic"/> whatever the host is doing.
+    /// </remarks>
+    public Net.ReplicationClass Class { get; private set; } = Net.ReplicationClass.Dynamic;
+
+    /// <summary>
     /// The node a client may move to fake holding this (arch §3.3). Meshes hang under it.
     /// </summary>
     /// <remarks>
@@ -100,10 +122,80 @@ public partial class Carryable : RigidBody3D
         Visual = GetNodeOrNull<Node3D>("Visual") ?? Attach();
         Synchronizer = GetNodeOrNull<MultiplayerSynchronizer>("Sync") ?? Sync();
 
+        // Dynamic until something says otherwise: a loose parcel is the class that has to be
+        // right by default, because the cheap classes are only correct when they are earned. The
+        // configuration is applied even to a synchronizer somebody else built, because every peer
+        // has to agree on the property list or a sync packet decodes against the wrong one.
+        Net.Replication.Apply(Synchronizer, Net.ReplicationClass.Dynamic, TransformProperty, RailProperty);
+
         // A conveyor finds the parcels it should be carrying by looking here (E4-01). Joining
         // in _Ready rather than on entry means a parcel spawned already railed - which is what
         // a client gets - is found without a second message.
         AddToGroup(Group);
+    }
+
+    // ponytail: every parcel polls its own class once per frame.
+    // Ceiling: one enum compare and two property reads per parcel per frame - at arch §8's 200
+    // live records that is noise beside the conveyor's own per-frame scan, and it is measured
+    // by E2-10 rather than assumed.
+    // Upgrade: drive it from the two things that actually change - the Rail setter and
+    // RigidBody3D's sleeping_state_changed signal - once a profile says the poll is worth
+    // removing. The flush below would still need a frame to land on.
+    /// <inheritdoc/>
+    public override void _Process(double delta) => Reclassify();
+
+    /// <summary>
+    /// Puts this parcel in the class its own state calls for, promoting and demoting in place
+    /// (E2-05, arch §3.4). Cheap, idempotent, and safe to call from anything that changes the
+    /// rail tuple rather than waiting for the next frame.
+    /// </summary>
+    public void Reclassify()
+    {
+        if (!IsNodeReady())
+        {
+            // No synchronizer to configure yet. A pooled body is cleared before it is ever
+            // handed out, and the pool may not be in the tree when that happens.
+            return;
+        }
+
+        if (!IsMultiplayerAuthority())
+        {
+            Follow();
+            return;
+        }
+
+        var next = Rail != Vector3.Zero ? Net.ReplicationClass.Railed
+            : Sleeping ? Net.ReplicationClass.Sleeping
+            : Net.ReplicationClass.Dynamic;
+
+        if (_flush > 0)
+        {
+            // Mid-flush. Finish it on whatever the parcel has since decided to be: a box that
+            // woke up again just gets its Dynamic interval put back.
+            if (--_flush == 0)
+            {
+                Enter(next);
+            }
+
+            return;
+        }
+
+        if (next == Class)
+        {
+            return;
+        }
+
+        if (next == Net.ReplicationClass.Sleeping)
+        {
+            // Arch §3.4 owes one final transform before the silence, and a synchronizer has no
+            // flush: the send is bought by holding Dynamic open with the interval at zero for a
+            // frame. Jolt has already stopped the body, so what goes out is the resting pose.
+            _flush = FlushFrames;
+            Synchronizer.ReplicationInterval = 0.0f;
+            return;
+        }
+
+        Enter(next);
     }
 
     /// <summary>Where carrier <paramref name="slot"/> holds, in this body's local space.</summary>
@@ -113,6 +205,29 @@ public partial class Carryable : RigidBody3D
 
     /// <summary>Where carrier <paramref name="slot"/> holds, in global space.</summary>
     public Vector3 GlobalGrip(int slot) => ToGlobal(LocalGrip(slot));
+
+    private void Enter(Net.ReplicationClass next)
+    {
+        Class = next;
+        Net.Replication.Apply(Synchronizer, next, TransformProperty, RailProperty);
+    }
+
+    private void Follow()
+    {
+        // A peer that does not own this body does not simulate it either (arch §3.1). A body that
+        // both integrates gravity and takes the authority's transform fights itself and settles
+        // about 25 cm low - measured in the L3 harness, 2026-08-25, where it presented as two
+        // intermittent assertion failures rather than as anything that looked like a bug.
+        if (Freeze)
+        {
+            return;
+        }
+
+        Freeze = true;
+        FreezeMode = FreezeModeEnum.Kinematic;
+        LinearVelocity = Vector3.Zero;
+        AngularVelocity = Vector3.Zero;
+    }
 
     private Node3D Attach()
     {
@@ -125,10 +240,6 @@ public partial class Carryable : RigidBody3D
     {
         var sync = new MultiplayerSynchronizer { Name = "Sync" };
         AddChild(sync);
-
-        // Dynamic until something says otherwise: a loose parcel is the class that has to be
-        // right by default, because the cheap classes are only correct when they are earned.
-        Net.Replication.Apply(sync, Net.ReplicationClass.Dynamic, TransformProperty, RailProperty);
         return sync;
     }
 }

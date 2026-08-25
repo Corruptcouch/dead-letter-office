@@ -54,7 +54,13 @@ public class ParcelIdentityTests
     public async Task Respawning_from_the_id_restores_the_parcel_the_record_describes()
     {
         var registry = new ParcelRegistry();
-        var record = registry.Register(archetype: 9, size: ParcelRecord.TwoPersonSize, condition: 3);
+        AssertBool(Address.TryParse("NORTHGATE-4-118", out var address)).IsTrue();
+        var record = registry.Register(
+            archetype: 9,
+            size: ParcelRecord.TwoPersonSize,
+            condition: 3,
+            manifest: new Manifest(address, Weight: 2.5f, Fragility: 10, new ContentsCode("STATIONERY")));
+
         var (root, first) = Spawn(record);
 
         try
@@ -74,11 +80,17 @@ public class ParcelIdentityTests
             AssertInt(second.Archetype).IsEqual(9);
             AssertInt(second.CarriersRequired).IsEqual(2);
 
-            // ponytail: the criterion says manifest, tamper state and culpability, and this
-            // asserts the physical facts instead.
-            // Ceiling: none of those three exist on ParcelRecord yet, so there is nothing more to
-            // restore - E2-03 owns the manifest, E2-07 tamper, and arch §4.6's ActorRef is
-            // unbuilt. The mechanism they will ride on is what is proved here.
+            // The manifest survives too, and it survives WHERE IT LIVES. It is not asserted on
+            // the node, because a node that carried one would be a node that could show it to a
+            // client that has not scanned the box (arch §5.3): the registry is what outlived the
+            // death, and the paperwork with it.
+            AssertObject(again.Manifest).IsNotNull();
+            AssertString(again.Manifest!.Destination.Value).IsEqual("NORTHGATE-4");
+
+            // ponytail: the criterion says manifest, tamper state and culpability, and two of
+            // those three are still missing.
+            // Ceiling: E2-07's tamper state and arch §4.6's ActorRef do not exist on
+            // ParcelRecord, so there is nothing more to restore. E3-04 added the manifest above.
             // Upgrade: each of those stories adds its field to this assertion; if one lands
             // without doing so, this test still passes and that is the gap to watch.
         }

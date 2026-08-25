@@ -107,6 +107,7 @@ public partial class ParcelPool : Node
         parcel.Condition = 0;
         parcel.GripHalfWidth = 0.5f;
 
+        parcel.Rail = Vector3.Zero;
         parcel.Freeze = false;
         parcel.Sleeping = false;
         parcel.LinearVelocity = Vector3.Zero;
@@ -118,6 +119,11 @@ public partial class ParcelPool : Node
             parcel.Visual.Position = Vector3.Zero;
             parcel.Visual.Basis = Basis.Identity;
         }
+
+        // Including its replication class, which is derived from the two lines above and would
+        // otherwise be the last parcel's for a frame — a recycled body silently not streaming
+        // its transform because the parcel before it was on a belt (E2-05).
+        parcel.Reclassify();
     }
 
     private Carryable Grow()

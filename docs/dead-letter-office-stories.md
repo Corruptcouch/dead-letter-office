@@ -30,10 +30,10 @@ marked as such instead of being rounded up.
 | **E14** Foundation | **8 done**, 1 partial | Complete bar E14-07's deliberate-failure run |
 | **E0** Netcode spine | **8 done**, 2 blocked | Spine is in and L3-proven. Steam is the only hole |
 | **E1** Embodiment | **9 done**, 1 blocked | Feature work complete. **Only Gate 0 itself is left** |
-| **E2 · E3 · E4** Tier 1 | **7 done** of 30 | E2's spine and E4's belt. **E2-05 and E4-03 are unblocked today**; E3 is untouched |
+| **E2 · E3 · E4** Tier 1 | **10 done** of 30 | **E2 is done to its limit** — only its two post-MVP stories and E2-09 (waiting on E4-03) are left. E3 has its routing function. **E4-03 is the unblocked one today** |
 | **Alongside** E12·13·15·17·18·19 | **3 done**, 2 partial of 29 | E13's spine is in and validated in CI. **E15-04 and E19-01/02 still block Gate 0** |
 
-**35 of 88 decomposed stories are done.** Suite: **L1 66 · L2 105 · L3 41**, all green,
+**38 of 88 decomposed stories are done.** Suite: **L1 79 · L2 111 · L3 56**, all green,
 `dotnet format` clean, and `ContentTool validate` green on the authored content.
 
 The five that fall short, all named rather than rounded up:
@@ -683,16 +683,44 @@ Manifest, address, destination code, weight, fragility, declared contents.
       the size byte, so nothing extra travels.
 
 #### E2-05 · Three replication classes, with promotion and demotion
-**Depends:** E2-04, E0-06, E4-01 · **Test:** L2 + L3
+**Depends:** E2-04, E0-06, E4-01 · **Test:** L2 + L3 · **Status:** ✅ **Done**
 
-- [ ] `Railed` sends `(beltId, distanceAlong, lane)` **once, on entry**, and produces zero ongoing
-      traffic; clients extrapolate (Arch §3.4).
-- [ ] `Dynamic` replicates transform as `UnreliableOrdered`.
-- [ ] `Sleeping` sends one final transform when Jolt reports sleep, then nothing at all.
-- [ ] Knocking a railed parcel off the belt promotes it; letting it settle demotes it — **both
-      directions asserted.**
-- [ ] **A belt parcel in `Dynamic` fails a test.** Arch §3.4 calls that a bug against the section,
-      so it earns an assertion rather than a code review.
+The class is the **parcel's own**, and only the authority has one: a peer that does not own the
+body neither simulates it nor reconfigures its synchronizer, because both peers decode a sync
+packet against their own property list and a client that disagreed would silently stop receiving.
+That single rule is also what closes arch §11's "must a client simulate a parcel it does not own",
+and it is why the L3 harness's `Freeze = !IsHost` workaround is deleted rather than kept.
+
+- [x] `Railed` sends `(beltId, distanceAlong, lane)` **once, on entry**, and produces zero ongoing
+      traffic; clients extrapolate (Arch §3.4). Metered at L2 and again at L3 over a real socket:
+      three seconds of riding cost **0 changes and 0 bytes**, and all four peers extrapolated the
+      same spline to the same place — asserted at the belt's *end*, where every peer's arithmetic
+      stops, so the tolerance is float noise rather than an allowance for clock skew.
+- [x] `Dynamic` replicates transform as `UnreliableOrdered`. **Measured, and the architecture was
+      wrong rather than the code**: Godot sends synchronizer state as plain `Unreliable` and keeps
+      ordering above the transport by dropping stale packets. Arch §3.4 is corrected and §11 carries
+      the finding. What the suite holds is the half that matters — **zero reliable packets while a
+      transform streams**, which is what a property silently becoming `OnChange` would break.
+- [x] `Sleeping` sends one final transform when Jolt reports sleep, then nothing at all. The final
+      one is bought by holding the Dynamic configuration open with the interval at zero for two
+      frames, because a synchronizer has no flush and nothing in a node's callback knows whether
+      the multiplayer poll runs before or after it. **Then nothing at all** is metered at L2, and
+      at L3 all four peers agree on the resting pose after the host has gone quiet.
+- [x] Knocking a railed parcel off the belt promotes it; letting it settle demotes it — **both
+      directions asserted.** Twice: at L2 on the classes themselves, and at L3 as the thing a
+      player would see — every peer watched the parcel leave the belt at 1.5 m and land.
+- [x] **A belt parcel in `Dynamic` fails a test.** Arch §3.4 calls that a bug against the section,
+      so it earns an assertion rather than a code review. Checked **every frame** for sixty of
+      them, because the way this regresses is one frame of promotion between a belt writing the
+      tuple and something else reading it.
+
+**Three things it changed on the way past.** The rail tuple is now watched in **every** class, not
+only in `Railed` — a parcel *leaving* a belt is a change to the tuple and the cheap classes send
+nothing else, so a tuple that stopped being watched on promotion left every other peer riding a
+parcel the host had already dropped. A conveyor now **sheds** riders whose tuple no longer names
+it, which on the host is `Release`'s doing and on a client is the only way a departure arrives.
+And `ParcelPool.Clear` did not reset `Rail`, so a recycled body would have been adopted by
+whatever belt it was last on — E2-06's own criterion, and it had grown a field since.
 
 #### E2-06 · Object pooling
 **Depends:** E2-02 · **Test:** L2 · **Status:** ✅ **Done**
@@ -733,13 +761,25 @@ Manifest, address, destination code, weight, fragility, declared contents.
 
 #### E2-10 · Replication budget measurement
 **Depends:** E2-05 · **Test:** measurement · **Answers:** epics open item 3, Arch open item 2
+· **Status:** ✅ **Done**
 
-- [ ] 40 awake parcel bodies plus a full belt, measured against Arch §8's **60 KB/s gameplay**
-      budget.
-- [ ] The number is **recorded in the repo** with the scenario that produced it, so the next
-      measurement is a comparison rather than a fresh argument.
-- [ ] If it exceeds budget, the finding names **which replication class is misbehaving**. It does
-      not propose a redesign — that is a separate conversation with the owner.
+- [x] 40 awake parcel bodies plus a full belt, measured against Arch §8's **60 KB/s gameplay**
+      budget. Host and three clients, over ENet's own `SentData` counter rather than a tally kept
+      above the transport, because the budget is about what leaves the machine. Three runs:
+      **idle 0.9–1.3 KB/s · a belt of 34 railed parcels 0.9–1.2 KB/s · 40 awake bodies 63–70 KB/s.**
+- [x] The number is **recorded in the repo** with the scenario that produced it, so the next
+      measurement is a comparison rather than a fresh argument. Arch §11 carries the finding;
+      `tests/Dlo.Net.Tests` scenario `budget` is the scenario, and it runs in CI as a regression
+      guard against a **recorded** 85 KB/s ceiling — which is not a budget and is not a revision
+      of one.
+- [x] If it exceeds budget, the finding names **which replication class is misbehaving**. It does
+      not propose a redesign — that is a separate conversation with the owner. **It exceeds it, by
+      5–17%, and `Dynamic` is the class.** `Railed` is exactly as cheap as Arch §3.4 claims: 34
+      parcels ongoing cost less than one loose box, and the whole belt's entry is a one-off ~3.3 KB.
+      One awake body costs **17–19 bytes per client per tick** — *better* than the 28 §3.4 assumed
+      — so the budget is missed on body count and rate, not on waste. **Arch §8's own two numbers
+      cannot both hold**, and which one gives is the owner's call: 60 KB/s buys ~35 awake bodies at
+      30 Hz, or all 40 at 20 Hz.
 
 ---
 
@@ -776,19 +816,41 @@ Manifest, address, destination code, weight, fragility, declared contents.
       deliberately available before it is wise (vision §3.5), and a safety prompt deletes the joke.
 
 #### E3-04 · `RoutingRules.Evaluate` and the L1 policy matrix
-**Depends:** E2-03, E13-03 · **Test:** L1
+**Depends:** E2-03, E13-03 · **Test:** L1 · **Status:** ✅ **Done**
 
 The single most-tested function in the codebase, and the reason "did the shift score correctly?"
 never requires four peers and a controller.
 
-- [ ] Signature exactly `Evaluate(ParcelRecord, ChuteId, PolicyState)` — pure: no clock, no engine,
-      no side effects (Arch §4.5).
-- [ ] The matrix covers correct route · misroute · unknown destination · a destination whose chute
+- [x] Signature exactly `Evaluate(ParcelRecord, ChuteId, PolicyState)` — pure: no clock, no engine,
+      no side effects (Arch §4.5). Asserted by reflection rather than by eye, because the way this
+      is lost is a fourth parameter in a diff that reads like a convenience.
+- [x] The matrix covers correct route · misroute · unknown destination · a destination whose chute
       changed mid-shift · a parcel with no destination · a policy mapping one destination to two
-      chutes, which E13-03 should already make impossible (assert both ends of that).
-- [ ] `Misroute_is_not_revealed_until_the_whistle` exists and passes. **No live wrong-chute
-      indicator** — the delayed reveal is the blame engine's ammunition (Arch §4.4).
-- [ ] Nothing caches a routing answer across a `PolicyState` change (Standards §12).
+      chutes, which E13-03 should already make impossible (assert both ends of that). Twelve cases,
+      built over the **real content loader** rather than a hand-made dictionary, so the matrix runs
+      on the shape `ContentTool` validates. A chute this facility does not have is in there too —
+      chute zero is not a special case, it is simply not the right one.
+- [x] `Misroute_is_not_revealed_until_the_whistle` exists and passes. **No live wrong-chute
+      indicator** — the delayed reveal is the blame engine's ammunition (Arch §4.4). Two halves:
+      evaluating leaves the record, the registry and the policy exactly as they were, so there is
+      nothing a live indicator could be driven from; and `ParcelRecord` is reflected over to prove
+      the outcome has **nowhere to live on a parcel**, which is how this would really regress.
+- [x] Nothing caches a routing answer across a `PolicyState` change (Standards §12). Asked eight
+      times before the change, so any memo keyed on the parcel is warm when it lands.
+
+**Two types it needed, and why they are two.** `PolicyState` is new and is deliberately *not*
+`RoutingPolicy`: one is what the content files said and never changes, the other is what is in
+force right now and the PA can rewrite. Keeping the authored seed is also what makes "the rules
+changed at four minutes" answerable at the whistle. `Reroute` **replaces**, refuses a destination
+nobody authored, and refuses chute zero — which is the live end of E13-03's one-destination-one-chute
+rule. **This story does not close E3-05**: `PolicyState` here is host-side data with no replication
+and no chart.
+
+`ParcelRecord` gained its `Manifest` here rather than in E2-03, because E2-03 built the model and
+nothing yet had a reason to attach it. It is nullable — a parcel with no paperwork is a dead
+letter, not an error — and it is **host-only, harder than the lock is**: not in `ParcelSpawnArgs`,
+never on the node, and E3-06 is what enforces that at the point of sending. E2-02's identity test
+now asserts the manifest survives the node's death *in the registry*, which is where it lives.
 
 #### E3-05 · `PolicyState` and the routing chart
 **Depends:** E3-04, E15-02 · **Test:** L1 + L2
@@ -1313,23 +1375,17 @@ Read off the dependency graph, not off preference. Everything here has its depen
 
 **Unblocked and off that path**, worth picking up alongside:
 
-- **E2-05** Replication classes with promotion and demotion — unblocked by E4-01, and the belt
-  already has both halves in reach: `Conveyor.Accept` promotes into `Railed` and `Release` hands a
-  parcel back to physics. What is owed is the demotion to `Sleeping` when Jolt reports rest, and
-  the L3 proof over a real socket. **`ReplicationMeter` is the instrument it needs**, and it
-  exists. Through it: E2-09 and E2-10.
-- **E4-03** Pneumatic tubes — unblocked by E4-01 and E2-02. A parcel in transit is `(tubeId, eta)`
-  with **no body at all**, which is the strongest test the identity work has: E2-02 proved a
-  record outlives its node, and this is the story that relies on it in flight.
+- **E4-03** Pneumatic tubes — unblocked by E4-01 and E2-02, and now **the only thing standing
+  between E2 and finished**: E2-09's belt → grab → throw → tube → respawn chain needs it. A parcel
+  in transit is `(tubeId, eta)` with **no body at all**, which is the strongest test the identity
+  work has: E2-02 proved a record outlives its node, and this is the story that relies on it in
+  flight.
 - **`GrabDirector`'s scene-path addressing** — E4-01 landed the belt but nothing yet pools a parcel
   into a live shift, so the ponytail's ceiling is still one story away. **E4-05 is the line**: a
   greybox with a running belt is where a recycled body first gets renamed under a grab.
 - **E13-04** Signage table — needs only E13-02, which is done, and it is the smallest story left
   in E13. **E13-07**, the authoring guide, needs only E13-05 and is the epic's actual thesis
   (vision §13): it is allowed to be bad, it is not allowed to be missing.
-- **E2-05** Replication classes — E1-06 ran into exactly what it exists for: a client that both
-  simulates and receives a body fights itself. The L3 harness freezes parcels on non-authority
-  peers to work around it, and that workaround is a note in this document rather than a design.
 - **E14-07's red run** — one scratch branch, one bad assert, one delete. Closes the last E14 box.
 - **E17-01** The asset specification — no dependencies beyond the scaffold, and E1-03's hands have
   nothing to show until placeholders exist.
@@ -1337,6 +1393,11 @@ Read off the dependency graph, not off preference. Everything here has its depen
 - **E18-01 / E18-02** Export verification — unblocked, but **install the 4.7.2-stable-mono export
   templates first**; the machine has 4.6 templates and this story fails until that is fixed. It is
   also the one unverified leg of the `net10.0` override (arch §1.4).
+
+**E3 is now waiting on a ruling, not on code.** E3-04 is done and nothing else in the epic is
+unblocked: E3-01 and E3-06 both hang off **gap 4 — what a post physically is** — and E3-02, E3-03
+and E3-05 hang off E3-01 in turn. E3-08 additionally wants **gap 2** settled. Those two answers
+are the cheapest thing anyone can do for this epic right now.
 
 **Do not start** E0-03 (blocked on E0-01), E3-10 (a held fix, and Gate 2 has not reported), or
 anything in Tier 2 — Gate 1 can still invalidate it, which is rung 1 of `AGENTS.md`.
@@ -1347,13 +1408,14 @@ anything in Tier 2 — Gate 1 can still invalidate it, which is rung 1 of `AGENT
 
 The epics document asks that a question a story cannot answer from its epic's **Decisions already
 made** be recorded and answered **once, at the epic level**. Decomposing the MVP line surfaced
-seven, and building E13 added two more. Four are genuinely open; three are duplications or inconsistencies that need a ruling rather
-than a decision.
+seven, building E13 added two more, and E2-10's measurement added a tenth. Five are genuinely
+open; three are duplications or inconsistencies that need a ruling rather than a decision, and
+two — 1 and 5 — are settled below.
 
 | # | Gap | Blocks | Suggested owner |
 | ---: | :-- | :-- | :-- |
 | 1 | **Who owns the player character's transform?** Arch §3.1 says host authority with no prediction of gameplay state; Arch §6.1 says input never waits for the network. For your own body those reconcile only if the character node's authority is the **owning peer** — which is not prediction, and a position is not a fact about the shift. That reading is assumed in E1-02 and needs confirming rather than inferring, because every other network story inherits it | E1-02, and everything downstream | Tech |
-| 2 | **Which policy judges a parcel already in flight?** E3-08 changes `PolicyState` mid-shift. A parcel stamped under the old policy and entering a chute after the change is judged by — the policy at stamp time, or at chute entry? Chute entry is assumed (it is crueller, more on-theme, and the only one that needs no cached answer, which Standards §12 forbids anyway), but it is a design call, not a technical one | E3-04, E3-08 | Owner |
+| 2 | **Which policy judges a parcel already in flight?** E3-08 changes `PolicyState` mid-shift. A parcel stamped under the old policy and entering a chute after the change is judged by — the policy at stamp time, or at chute entry? Chute entry is assumed (it is crueller, more on-theme, and the only one that needs no cached answer, which Standards §12 forbids anyway), but it is a design call, not a technical one. **E3-04 shipped without settling it and did not have to**: `Evaluate` takes the policy as an argument and holds no clock, so *which* policy is the caller's to choose and no answer is baked in. It now blocks E3-08 alone | E3-08 | Owner |
 | 3 | **Does a host-lost shift produce a report?** E12-05 ends the shift cleanly on all peers. Vision §7 makes the report the highest-value feature and §3.5 makes blame the comedy engine — a rage-quitting host who deletes everyone's report is a real outcome to have an opinion about | E12-05, E8 later | Owner |
 | 4 | **What is a post, physically?** A volume you stand in, or a station you interact with? E3-01 and E3-06 both hang off the answer, and so does whether "you cannot work two at once" is enforced by geometry or by state | E3-01, E3-06, E4-05 | Owner + Tech |
 | 5 | **Host-loss teardown is listed in two epics.** It is a story in E0 *and* in E12. Split here as E0-10 (session ends cleanly, asserted at L3) and E12-05 (the player-facing message and return to lobby). Confirm or merge | E0-10, E12-05 | Tech |
@@ -1361,6 +1423,12 @@ than a decision.
 | 7 | **Gate 2 needs Gate 1's kit.** Gate 2 lives in E3 (Tier 1), but it needs four players and a lobby, which is Gate 1's line. Sequence is presumably Gate 1 → Gate 2 in the same window; worth stating, because "Gate 2 lives in E3" reads as though it comes first | E3-09, E19-05 | Owner |
 | 8 | **Arch §7 says the routing policy is a `.tres`, and it was built as a data table.** Two rules collide: `ContentTool` may reference Domain and nothing else (arch §1.3), and Domain may not reference Godot (arch §2) — so the validator reads `.tres` as text. That is fine for archetypes, which are flat scalars in one file each. A routing policy is a two-column mapping, and its `.tres` form is a multi-line Godot dictionary whose diffs are worse than a table's — which defeats the stated reason `.tres` is kept out of LFS at all. **Built as `content/routing.csv`; needs ratifying or reverting** | E13-03, E3-04 | Tech |
 | 9 | **The contents table is a content type arch §7 does not list.** E13-01 requires that "declared contents resolve", and nothing to resolve them against existed. Added as `content/contents.csv`, so an archetype naming contents nobody declared is a build failure rather than a box that says nothing. It wants a row in arch §7's table, or a ruling that declared contents should have been free text | E13-01, E2-03, E2-08 | Tech |
+| 10 | **Arch §8's two replication numbers contradict each other, and the measurement says which gives.** E2-10 measured 40 awake bodies at **63–70 KB/s** against a **60 KB/s** budget, with a transform encoding already cheaper than §3.4 assumed — so this is a design choice, not a saving to find. Filed as **epics open item 11**; recorded here because E5 sets mail volume against it and E6 adds to it | E5, E6, E4-10 | Owner + Tech |
+
+**Gap 4 is now the most expensive one open.** It was filed as blocking E3-01, E3-06 and E4-05;
+with E3-04 done it blocks **the entire rest of E3**, because E3-02, E3-03 and E3-05 all depend on
+E3-01 and E3-01 cannot start without it. One answer — a volume you stand in, or a station you
+interact with — unblocks five stories.
 
 **Gaps 8 and 9 are open by construction, not by oversight.** Both were forced by building E13
 and both are recorded rather than decided privately, which is what the epics document asks for.

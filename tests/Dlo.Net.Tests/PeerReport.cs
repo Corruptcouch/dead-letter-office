@@ -115,6 +115,55 @@ public static class PeerReport
     /// <summary>E1-06: the largest single-frame jump this peer saw the parcel make.</summary>
     public const string Jump = "jump";
 
+    /// <summary>E2-05: where this peer last saw the parcel while it was on the belt.</summary>
+    public const string Rail = "rail";
+
+    /// <summary>E2-05: how far along the belt this peer last saw the parcel, in metres.</summary>
+    public const string RailDistance = "raildist";
+
+    /// <summary>E2-05: the replication class this peer's parcel was in at exit.</summary>
+    public const string Class = "class";
+
+    /// <summary>E2-05: property changes the host's parcel synchronizer caused while railed.</summary>
+    public const string RideChanges = "ridechanges";
+
+    /// <summary>E2-05: bytes the host's parcel synchronizer cost while railed.</summary>
+    public const string RideBytes = "ridebytes";
+
+    /// <summary>E2-05: reliable packets this client took in while the parcel was falling.</summary>
+    public const string FallReliable = "fallrel";
+
+    /// <summary>E2-05: unreliable packets this client took in while the parcel was falling.</summary>
+    /// <remarks>
+    /// <b>Unreliable, not unreliable-ordered.</b> Measured 2026-08-25: Godot sends a
+    /// synchronizer's streamed state as plain <c>TRANSFER_MODE_UNRELIABLE</c> and keeps ordering
+    /// above the transport instead, by stamping each sync packet and dropping stale ones. Arch
+    /// §3.4 names the mode rather than the property; the property holds and the name does not.
+    /// </remarks>
+    public const string FallStream = "fallstream";
+
+    /// <summary>E2-10: host upstream in bytes per second with nothing but the beacon running.</summary>
+    public const string IdleRate = "idlerate";
+
+    /// <summary>E2-10: host upstream over the window a belt's parcels were put on it.</summary>
+    /// <remarks>
+    /// The one-off cost of arch §3.4's "~6 bytes, once", kept apart from
+    /// <see cref="RailedRate"/> so that the ongoing figure is the ongoing figure.
+    /// </remarks>
+    public const string EntryRate = "entryrate";
+
+    /// <summary>E2-10: host upstream, steady state, with a belt backed up to its end.</summary>
+    public const string RailedRate = "railedrate";
+
+    /// <summary>E2-10: host upstream in bytes per second with forty awake bodies on top.</summary>
+    public const string AwakeRate = "awakerate";
+
+    /// <summary>E2-10: how many parcels were riding the belt when it was measured.</summary>
+    public const string RailedBodies = "railedbodies";
+
+    /// <summary>E2-10: how many awake parcel bodies were streaming when it was measured.</summary>
+    public const string AwakeBodies = "awakebodies";
+
     /// <summary>Whether <paramref name="line"/> is a peer report rather than engine output.</summary>
     public static bool IsReport(string line) =>
         line.StartsWith(Prefix + " ", StringComparison.Ordinal);

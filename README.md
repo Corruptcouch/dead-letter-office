@@ -210,15 +210,18 @@ spike that decides whether the C# path is usable at all. When you come to run it
 clients — over ENet on `127.0.0.1:27377`, and asserts that an intent RPC arrives and a
 replicated value converges on all three clients.
 
-It runs that four-peer boot **three times, once per scenario**. Every scenario is identical up
-to the moment the four peers have converged; only the ending differs, so a failure before
-convergence is E0-09's and a failure after it is E0-10's without anyone having to work it out:
+It runs that four-peer boot **once per scenario**. Every scenario is identical up
+to the moment the four peers have converged; only what happens next differs, so a failure before
+convergence is E0-09's and a failure after it belongs to whichever scenario was running:
 
-| Scenario | Ending | Owns |
+| Scenario | What happens after convergence | Owns |
 | :-- | :-- | :-- |
 | `converge` | Nothing goes wrong | E0-09 |
 | `departure` | `client3` leaves; the host publishes a **second** value afterwards that the two survivors must still converge on and echo back | E0-10 |
 | `hostloss` | The host tears the session down; every client must notice and end its own session cleanly | E0-10 |
+| `contention` | All three clients reach for one parcel at once, and exactly one may end up holding it | E1-06 |
+| `railed` | One parcel rides a belt, is knocked off it, falls and settles — and all four peers must agree where it is, having been sent one twelve-byte tuple | E2-05 |
+| `budget` | Forty awake bodies and a belt backed up to its end, metered through ENet's own byte counter against arch §8 | E2-10 |
 
 `--dlo-scenario=` selects one if you are launching a peer by hand:
 
@@ -231,8 +234,9 @@ one process all four peers share one physics world, one CLR and one set of autol
 would make every physics-bearing L3 assertion a lie. The measurements behind that are on
 `FourPeerSession`.
 
-- **It costs about 2 s for all three scenarios**, against arch §10.1's "minutes" budget. There
-  is no reason to avoid running it.
+- **It costs about 20 s for all six scenarios**, against arch §10.1's "minutes" budget. There
+  is no reason to avoid running it. Most of that is `railed` and `budget`, which measure over
+  wall-clock windows and cannot be hurried.
 - **The runs are serialised, and must stay that way.** `EnetTransport.Port` is a fixed 27377,
   so two four-peer runs on one machine collide — measured: clients connect to another
   scenario's host, converge on its value, and every peer then times out at 20 s. It reads as a

@@ -90,9 +90,9 @@ public partial class Conveyor : Node3D
     /// Takes <paramref name="parcel"/> off this belt and leaves it loose, wherever it is.
     /// </summary>
     /// <remarks>
-    /// The demotion to <see cref="ReplicationClass.Dynamic"/> is E2-05's, which owns what a
-    /// parcel knocked off a belt costs. This clears the rail tuple and unfreezes the body, which
-    /// is all a belt has an opinion about.
+    /// Clearing the rail tuple is the whole of it: the parcel reads that and demotes itself out
+    /// of <see cref="ReplicationClass.Railed"/> (E2-05), and the tuple going to zero is also how
+    /// a client hears that the parcel left, since the cheap classes send nothing else.
     /// </remarks>
     public void Release(Carryable parcel)
     {
@@ -106,12 +106,14 @@ public partial class Conveyor : Node3D
         _riders.Remove(rider);
         parcel.Rail = Vector3.Zero;
         parcel.Freeze = false;
+        parcel.Reclassify();
     }
 
     /// <inheritdoc/>
     public override void _PhysicsProcess(double delta)
     {
         Adopt();
+        Shed();
         Advance((float)delta);
     }
 
@@ -146,11 +148,6 @@ public partial class Conveyor : Node3D
 
         foreach (var rider in _riders)
         {
-            if (!GodotObject.IsInstanceValid(rider.Parcel))
-            {
-                continue;
-            }
-
             var ceiling = lanes.TryGetValue(rider.Lane, out var ahead)
                 ? Mathf.Min(length, ahead - Spacing)
                 : length;
@@ -160,8 +157,6 @@ public partial class Conveyor : Node3D
 
             rider.Parcel.GlobalTransform = Placement(rider.Distance, rider.Lane);
         }
-
-        _riders.RemoveAll(static r => !GodotObject.IsInstanceValid(r.Parcel));
     }
 
     // ponytail: a client finds its railed parcels by scanning the parcel group each frame.
@@ -185,6 +180,17 @@ public partial class Conveyor : Node3D
         }
     }
 
+    /// <summary>
+    /// Drops riders whose tuple no longer names this belt.
+    /// </summary>
+    /// <remarks>
+    /// On the host that is <see cref="Release"/>'s doing and already done. On a client it is the
+    /// only way a departure ever arrives, because a railed parcel sends nothing but its tuple.
+    /// </remarks>
+    private void Shed() => _riders.RemoveAll(rider =>
+        !GodotObject.IsInstanceValid(rider.Parcel)
+        || !Mathf.IsEqualApprox(rider.Parcel.Rail.X, BeltId));
+
     private void Ride(Carryable parcel, int lane, float distance)
     {
         // Kinematic, not simulated: the spline is the authority on where a railed parcel is, and
@@ -194,11 +200,9 @@ public partial class Conveyor : Node3D
         parcel.LinearVelocity = Vector3.Zero;
         parcel.AngularVelocity = Vector3.Zero;
 
-        Replication.Apply(
-            parcel.Synchronizer,
-            ReplicationClass.Railed,
-            Carryable.TransformProperty,
-            Carryable.RailProperty);
+        // The class is the parcel's own (E2-05), and it reads the tuple this belt just wrote.
+        // Poked rather than left to the next frame, so Accept is done when it returns.
+        parcel.Reclassify();
 
         _riders.Add(new Rider(parcel, lane, distance));
         parcel.GlobalTransform = Placement(distance, lane);

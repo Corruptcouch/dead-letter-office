@@ -75,9 +75,14 @@ public static class Replication
     /// The property carrying position, replicated only in <see cref="ReplicationClass.Dynamic"/>.
     /// </param>
     /// <param name="rail">
-    /// The property carrying <c>(beltId, distanceAlong, lane)</c>, watched only in
-    /// <see cref="ReplicationClass.Railed"/>.
+    /// The property carrying <c>(beltId, distanceAlong, lane)</c>, watched in <b>every</b> class.
     /// </param>
+    /// <remarks>
+    /// The rail tuple is watched whatever the class, because a parcel <i>leaving</i> a belt is a
+    /// change to it and nothing else on the wire says so — and in the cheap classes there is no
+    /// transform stream to say it either. Watching costs nothing while it does not move, which is
+    /// the whole of <c>OnChange</c>.
+    /// </remarks>
     public static void Apply(
         MultiplayerSynchronizer synchronizer,
         ReplicationClass replicationClass,
@@ -97,9 +102,7 @@ public static class Replication
             ? SceneReplicationConfig.ReplicationMode.Always
             : SceneReplicationConfig.ReplicationMode.Never);
 
-        config.PropertySetReplicationMode(rail, replicationClass == ReplicationClass.Railed
-            ? SceneReplicationConfig.ReplicationMode.OnChange
-            : SceneReplicationConfig.ReplicationMode.Never);
+        config.PropertySetReplicationMode(rail, SceneReplicationConfig.ReplicationMode.OnChange);
 
         synchronizer.ReplicationConfig = config;
         synchronizer.ReplicationInterval = (float)IntervalFor(replicationClass);
