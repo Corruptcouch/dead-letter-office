@@ -23,8 +23,8 @@ namespace Dlo.Net.Tests;
 /// and that is a property of the message rather than of the assertion.
 /// </para>
 /// </remarks>
-public class FourPeerSessionTests(FourPeerSession run, ITestOutputHelper output)
-    : IClassFixture<FourPeerSession>
+public class FourPeerSessionTests(ConvergeRun run, ITestOutputHelper output)
+    : IClassFixture<ConvergeRun>
 {
     /// <summary>
     /// Arch §10.1 budgets minutes for L3. Observed: about two seconds. This bound is neither,

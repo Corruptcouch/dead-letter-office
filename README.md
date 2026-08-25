@@ -160,20 +160,44 @@ it; the test explorer covers the same ground without adding a tracked dependency
 clients — over ENet on `127.0.0.1:27377`, and asserts that an intent RPC arrives and a
 replicated value converges on all three clients.
 
+It runs that four-peer boot **three times, once per scenario**. Every scenario is identical up
+to the moment the four peers have converged; only the ending differs, so a failure before
+convergence is E0-09's and a failure after it is E0-10's without anyone having to work it out:
+
+| Scenario | Ending | Owns |
+| :-- | :-- | :-- |
+| `converge` | Nothing goes wrong | E0-09 |
+| `departure` | `client3` leaves; the host publishes a **second** value afterwards that the two survivors must still converge on and echo back | E0-10 |
+| `hostloss` | The host tears the session down; every client must notice and end its own session cleanly | E0-10 |
+
+`--dlo-scenario=` selects one if you are launching a peer by hand:
+
+```bash
+"$GODOT_BIN" --headless --path tests/Dlo.Net.Tests -- --dlo-role=host --dlo-scenario=departure
+```
+
 **Four processes and not four `SceneTree`s** is E0-08's finding, and it is not about speed: in
 one process all four peers share one physics world, one CLR and one set of autoloads, which
 would make every physics-bearing L3 assertion a lie. The measurements behind that are on
 `FourPeerSession`.
 
-- **It costs about 0.6 s**, against arch §10.1's "minutes" budget. There is no reason to avoid
-  running it.
+- **It costs about 2 s for all three scenarios**, against arch §10.1's "minutes" budget. There
+  is no reason to avoid running it.
+- **The runs are serialised, and must stay that way.** `EnetTransport.Port` is a fixed 27377,
+  so two four-peer runs on one machine collide — measured: clients connect to another
+  scenario's host, converge on its value, and every peer then times out at 20 s. It reads as a
+  network fault and it is a scheduling one. One `[assembly: CollectionBehavior]` line in
+  `FourPeerSession.cs` is what holds it; do not remove it to make the suite faster.
 - **CI runs it on merge to main only**, as a separate job (arch §10.6). Not because it is
   slow, but because a network suite is the one most likely to go flaky on a shared runner.
 - **It fails, loudly, when `GODOT_BIN` is unset.** It does not skip. An L3 suite that skips
   itself reports green, which is worse than not having one.
 - **A failure prints every peer's position** — exit code, connection id, what it held, how
-  many attempts it took. That transcript is the point of the harness; read it before doing
-  anything else.
+  many attempts it took, and whether its teardown left anything behind. That transcript is the
+  point of the harness; read it before doing anything else.
+- **`teardown=dirty` in a transcript means `SessionRoot.Leave` returned with a peer or a
+  `HostSession` still attached.** It is the one failure in this suite that an exit code cannot
+  show, which is why it is a field rather than an assertion inside the peer.
 - **It needs a Debug build.** Godot loads a project's C# from `.godot/mono/temp/bin/Debug`
   whatever configuration you built in, so `dotnet test -c Release` here fails with a message
   telling you so rather than with four timeouts.

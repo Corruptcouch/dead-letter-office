@@ -80,6 +80,25 @@ public sealed class PeerOutcome
         }
     }
 
+    /// <summary>
+    /// Lines that look like an engine error or an unhandled managed exception (E0-10).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// E0-10 asks for a disconnect that leaves "no exceptions", and an exit code cannot say
+    /// that: Godot prints an unhandled exception thrown inside <c>_Process</c> and then carries
+    /// on to the next frame, so a peer can throw on every frame and still exit 0.
+    /// </para>
+    /// <para>
+    /// <b>Only meaningful on a peer that ended on its own.</b> A peer the harness kills prints
+    /// a handful of <c>ERROR: ... leaked at exit</c> lines on the way down — measured
+    /// 2026-08-25 — which are an artefact of the kill and not of anything the peer did. That
+    /// is not a problem in practice, because a peer that had to be killed has already failed
+    /// <c>Every_peer_ended_on_its_own</c>.
+    /// </para>
+    /// </remarks>
+    public IEnumerable<string> Errors => Output.Where(IsError);
+
     /// <summary>One field of the report, or <c>(none)</c> if the peer never reported.</summary>
     public string Field(string key) => _report.TryGetValue(key, out var value) ? value : "(none)";
 
@@ -118,4 +137,9 @@ public sealed class PeerOutcome
 
         return tail.ToString();
     }
+
+    private static bool IsError(string line) =>
+        line.StartsWith("ERROR:", StringComparison.Ordinal)
+        || line.StartsWith("SCRIPT ERROR:", StringComparison.Ordinal)
+        || line.Contains("Unhandled exception", StringComparison.Ordinal);
 }

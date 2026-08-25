@@ -30,6 +30,9 @@ public static class PeerReport
     /// <summary>Which peer this is: <c>host</c>, or <c>client1</c>..<c>client3</c>.</summary>
     public const string Role = "role";
 
+    /// <summary>Which scripted ending this peer was launched to play. See <see cref="Scenario"/>.</summary>
+    public const string Scenario = "scenario";
+
     /// <summary>How this peer finished: <see cref="Ok"/>, <see cref="Timeout"/> or <see cref="Idle"/>.</summary>
     public const string Status = "status";
 
@@ -48,6 +51,12 @@ public static class PeerReport
     /// <summary>What the host heard, as <c>id:beat</c> pairs, or <see cref="None"/>.</summary>
     public const string Heard = "heard";
 
+    /// <summary>
+    /// What this peer's <c>SessionRoot</c> looked like after it tore its session down:
+    /// <see cref="Clean"/>, <see cref="Dirty"/>, or <see cref="Live"/> if it never did.
+    /// </summary>
+    public const string Teardown = "teardown";
+
     /// <summary>Connection attempts this peer made. &gt; 1 means it out-raced the host's boot.</summary>
     public const string Attempts = "attempts";
 
@@ -62,6 +71,28 @@ public static class PeerReport
 
     /// <summary>Launched with no role to play — the warm-up pass that creates <c>.godot/</c>.</summary>
     public const string Idle = "idle";
+
+    /// <summary>This peer left the session deliberately — the leaver in <c>departure</c> (E0-10).</summary>
+    public const string Left = "left";
+
+    /// <summary>This peer's host went away and it ended itself — <c>hostloss</c> (E0-10).</summary>
+    public const string HostLost = "hostlost";
+
+    /// <summary>This peer tore its own session down — the host in <c>hostloss</c> (E0-10).</summary>
+    public const string TornDown = "torndown";
+
+    /// <summary>Teardown left nothing behind: no peer, and no <c>HostSession</c>.</summary>
+    public const string Clean = "clean";
+
+    /// <summary>
+    /// Teardown returned but left something behind. The whole point of the field: a
+    /// <c>SessionRoot</c> that still reports a live session after <c>Leave()</c> is the
+    /// orphan E0-10 exists to catch, and it is invisible from the exit code.
+    /// </summary>
+    public const string Dirty = "dirty";
+
+    /// <summary>This peer never tore its session down, so there is nothing to say about it.</summary>
+    public const string Live = "live";
 
     /// <summary>Stands in for an empty <see cref="Heard"/>, so the field never parses as absent.</summary>
     public const string None = "-";

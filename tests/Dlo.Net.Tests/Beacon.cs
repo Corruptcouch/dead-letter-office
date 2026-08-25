@@ -29,6 +29,19 @@ public partial class Beacon : Node
     public const int Sentinel = 7;
 
     /// <summary>
+    /// The second value, published only in <see cref="Scenario.Departure"/> and only once the
+    /// leaver is gone. Converging on it is what makes E0-10's "the survivors keep functioning"
+    /// an assertion rather than a hope: a survivor holding this held it <i>after</i> a peer
+    /// dropped out of the session, not merely through the moment it did.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="Sentinel"/> and from the default for the same reason
+    /// <see cref="Sentinel"/> is distinct from 0 — a second value that could be mistaken for
+    /// the first would let the departure round pass on the strength of the first one.
+    /// </remarks>
+    public const int Aftermath = 11;
+
+    /// <summary>
     /// The host-owned replicated value. <c>[Export]</c> is not decoration — a
     /// <see cref="SceneReplicationConfig"/> can only name properties Godot can see.
     /// </summary>

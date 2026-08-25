@@ -24,6 +24,14 @@ namespace Dlo.Net.Tests;
 /// <see cref="FourPeerSession"/>.
 /// </para>
 /// <para>
+/// <b>Every run is identical up to convergence; only the ending differs</b> (E0-10). All three
+/// <see cref="Scenario"/>s connect four peers, publish one value and collect three reports.
+/// What happens after that is the scenario: nothing (<c>converge</c>), a client leaving
+/// (<c>departure</c>), or the host tearing down (<c>hostloss</c>). That split is what the small
+/// state machine below buys — a failure before convergence belongs to E0-09 and a failure after
+/// it to E0-10, and nobody has to work out which.
+/// </para>
+/// <para>
 /// <b>The peers run this project, not <c>src/Dlo.Game</c>.</b> That keeps harness-only code —
 /// <see cref="Beacon"/>, this scenario — out of the shipping build, and it is the same trade
 /// tests/Dlo.Game.Tests already made at L2. The ceiling is the same too, and worth stating:
@@ -64,26 +72,38 @@ public partial class Peer : Node
     private const double RetrySeconds = 0.25;
 
     private string _role = HostRole;
+    private string _scenario = Scenario.Converge;
     private SessionRoot _session = null!;
     private Beacon _beacon = null!;
     private double _elapsed;
     private double _sentAt = double.NaN;
+    private double _echoedAt = double.NaN;
     private double _lastAttempt;
     private int _attempts;
     private int _id;
+    private string _teardown = PeerReport.Live;
     private bool _finished;
 
     private bool IsHost => _role == HostRole;
 
+    /// <summary>Whether this peer is the one that walks out in <see cref="Scenario.Departure"/>.</summary>
+    private bool IsLeaver => _role == Scenario.Leaver;
+
     private bool HasReported => !double.IsNaN(_sentAt);
 
+    private bool HasEchoed => !double.IsNaN(_echoedAt);
+
     private int Crew => _session?.Session?.ConnectedPeers.Count ?? 0;
+
+    /// <summary>Reports naming <see cref="Beacon.Aftermath"/> — the survivors, host-side.</summary>
+    private int Echoes => _beacon.Reports.Count(report => report.Value == Beacon.Aftermath);
 
     /// <summary>This peer's connection state, with Godot's stand-in read as what it means.</summary>
     /// <remarks>
     /// <c>Multiplayer.MultiplayerPeer</c> is never null — Godot substitutes an
     /// <see cref="OfflineMultiplayerPeer"/>, and that one reports <c>Connected</c>. Taking it
-    /// at face value would make a torn-down client look connected and stop it retrying.
+    /// at face value would make a torn-down client look connected and stop it retrying, and in
+    /// <see cref="Scenario.HostLoss"/> it would hide the very host loss under test.
     /// </remarks>
     private MultiplayerPeer.ConnectionStatus Status => Multiplayer.MultiplayerPeer switch
     {
@@ -94,7 +114,8 @@ public partial class Peer : Node
     /// <inheritdoc/>
     public override void _Ready()
     {
-        _role = RoleFromCommandLine();
+        _role = Argument(RoleArgument, HostRole);
+        _scenario = Argument(Scenario.Argument, Scenario.Converge);
 
         // Headless Godot runs its main loop as fast as the machine allows. Four of those is
         // four cores spinning to make a two-second test two seconds long, and on a shared CI
@@ -160,54 +181,167 @@ public partial class Peer : Node
     private void TickHost()
     {
         // Published only once the crew is complete, so a client cannot pass by connecting
-        // late and reading a value that was already sitting there when it arrived.
-        if (Crew == ClientCount + 1 && _beacon.Beat != Beacon.Sentinel)
+        // late and reading a value that was already sitting there when it arrived. Guarded on
+        // the default rather than on the sentinel, because in `departure` the value moves on
+        // to Aftermath and a `!= Sentinel` guard would then publish the sentinel a second time.
+        if (Crew == ClientCount + 1 && _beacon.Beat == default)
         {
             _beacon.Beat = Beacon.Sentinel;
         }
 
-        if (_beacon.Reports.Count == ClientCount)
+        if (_beacon.Reports.Count < ClientCount)
         {
-            Finish(PeerReport.Ok, 0);
+            return;
+        }
+
+        // Every scenario arrives here having done exactly what E0-09 asserts. What follows is
+        // the ending under test.
+        switch (_scenario)
+        {
+            case Scenario.Departure:
+                // The second value goes out only once the leaver is actually gone. Publishing
+                // it any earlier would let a survivor converge on it BEFORE the departure,
+                // which proves nothing about surviving one - and an assertion that passes for
+                // the wrong reason is the one thing this suite cannot afford.
+                if (Crew == ClientCount)
+                {
+                    _beacon.Beat = Beacon.Aftermath;
+                }
+
+                if (Echoes == ClientCount - 1)
+                {
+                    Finish(PeerReport.Ok, 0);
+                }
+
+                break;
+
+            case Scenario.HostLoss:
+                EndSession(PeerReport.TornDown);
+                break;
+
+            default:
+                Finish(PeerReport.Ok, 0);
+                break;
         }
     }
 
     private void TickClient()
     {
-        var connected = Status == MultiplayerPeer.ConnectionStatus.Connected;
-
-        if (HasReported)
+        if (Status != MultiplayerPeer.ConnectionStatus.Connected)
         {
-            // Either the flush window elapsed, or the host collected its three reports and
-            // went away first. Both mean this client is done.
-            if (!connected || _elapsed - _sentAt > FlushSeconds)
+            if (HasReported)
             {
-                Finish(PeerReport.Ok, 0);
+                // The host is gone. In `hostloss` that is the scenario under test; in the
+                // others it only means the host collected what it needed and finished first.
+                // Either way this peer's session has to end cleanly, so both take one path.
+                EndSession(_scenario == Scenario.HostLoss ? PeerReport.HostLost : PeerReport.Ok);
+            }
+            else if (_elapsed - _lastAttempt > RetrySeconds)
+            {
+                // Four processes start at once and the host is not always first to bind.
+                // Retrying is what removes that race; the alternative is sequencing on the
+                // host's stdout, which is block-buffered through a pipe and would trade a real
+                // race for a worse one.
+                Attempt();
             }
 
             return;
         }
 
-        if (connected)
+        if (!HasReported)
         {
             // Converged, so report. The RPC arriving at the host is what proves the
             // replication went through — the host never has to trust a client's word for it.
             if (_beacon.Beat == Beacon.Sentinel)
             {
-                _sentAt = _elapsed;
-                _beacon.RpcId(1, Beacon.MethodName.ReportBeat, _beacon.Beat);
+                Send(out _sentAt);
             }
 
             return;
         }
 
-        // Four processes start at once and the host is not always first to bind. Retrying is
-        // what removes that race; the alternative is sequencing on the host's stdout, which is
-        // block-buffered through a pipe and would trade a real race for a worse one.
-        if (_elapsed - _lastAttempt > RetrySeconds)
+        switch (_scenario)
         {
-            Attempt();
+            case Scenario.Departure when IsLeaver:
+                // The departure itself, held until the flush window so the host is certain to
+                // hold this peer's report before it loses the peer that sent it. A leaver
+                // whose report never arrived would make the host's `heard` ambiguous.
+                if (_elapsed - _sentAt > FlushSeconds)
+                {
+                    EndSession(PeerReport.Left);
+                }
+
+                break;
+
+            case Scenario.Departure:
+                // A survivor. It waits for the host's second value, echoes it, and only then
+                // goes - so its report is evidence that it kept working after the departure
+                // rather than merely through the moment of it.
+                if (!HasEchoed)
+                {
+                    if (_beacon.Beat == Beacon.Aftermath)
+                    {
+                        Send(out _echoedAt);
+                    }
+                }
+                else if (_elapsed - _echoedAt > FlushSeconds)
+                {
+                    Finish(PeerReport.Ok, 0);
+                }
+
+                break;
+
+            case Scenario.HostLoss:
+                // Nothing to do but stay up. This scenario ends in the disconnected branch
+                // above, and a client that ends any other way was never told the host went
+                // away - which is exactly the failure the scenario is looking for.
+                break;
+
+            default:
+                if (_elapsed - _sentAt > FlushSeconds)
+                {
+                    Finish(PeerReport.Ok, 0);
+                }
+
+                break;
         }
+    }
+
+    /// <summary>Sends what this peer is holding to the host, and stamps when it did.</summary>
+    private void Send(out double stamp)
+    {
+        stamp = _elapsed;
+        _beacon.RpcId(1, Beacon.MethodName.ReportBeat, _beacon.Beat);
+    }
+
+    /// <summary>
+    /// Ends this peer's session and records whether the teardown left anything behind (E0-10).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>SessionRoot.Leave</c> is contracted to be safe when there is no session and safe
+    /// twice. This is that contract checked from the outside, on peers that really did lose a
+    /// host or really did tear down — the only place where it means anything. The result
+    /// travels in the report rather than being asserted here, because a peer that throws
+    /// inside <c>_Process</c> tells the harness far less than one that exits normally saying
+    /// <c>teardown=dirty</c>.
+    /// </para>
+    /// <para>
+    /// <b>The story stops here.</b> Re-forming a session afterwards is not E0-10's to do: the
+    /// player-facing message and the return to the lobby are E12-05, which is also explicit
+    /// that there is no host migration. A peer that rebuilt a session here would be testing
+    /// that decision rather than this one.
+    /// </para>
+    /// </remarks>
+    private void EndSession(string status)
+    {
+        _session.Leave();
+
+        _teardown = !_session.IsInSession && _session.Session is null
+            ? PeerReport.Clean
+            : PeerReport.Dirty;
+
+        Finish(status, 0);
     }
 
     private void Attempt()
@@ -240,12 +374,14 @@ public partial class Peer : Node
         ' ',
         PeerReport.Prefix,
         $"{PeerReport.Role}={_role}",
+        $"{PeerReport.Scenario}={_scenario}",
         $"{PeerReport.Status}={status}",
         $"{PeerReport.Id}={_id}",
         $"{PeerReport.Crew}={Crew}",
         $"{PeerReport.Beat}={_beacon?.Beat ?? 0}",
         $"{PeerReport.Intents}={_beacon?.Reports.Count ?? 0}",
         $"{PeerReport.Heard}={Heard()}",
+        $"{PeerReport.Teardown}={_teardown}",
         $"{PeerReport.Attempts}={_attempts}",
         $"{PeerReport.Elapsed}={_elapsed.ToString("F2", CultureInfo.InvariantCulture)}");
 
@@ -254,16 +390,17 @@ public partial class Peer : Node
             ? PeerReport.None
             : string.Join(',', _beacon.Reports.Select(report => $"{report.Key}:{report.Value}"));
 
-    private static string RoleFromCommandLine()
+    /// <summary>Reads one <c>--switch=value</c> off the command line, or its default.</summary>
+    private static string Argument(string prefix, string fallback)
     {
         foreach (var argument in OS.GetCmdlineUserArgs())
         {
-            if (argument.StartsWith(RoleArgument, StringComparison.Ordinal))
+            if (argument.StartsWith(prefix, StringComparison.Ordinal))
             {
-                return argument[RoleArgument.Length..];
+                return argument[prefix.Length..];
             }
         }
 
-        return HostRole;
+        return fallback;
     }
 }

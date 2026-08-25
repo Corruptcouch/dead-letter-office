@@ -1047,6 +1047,12 @@ than a decision.
 | 6 | **Scanner and chart appear in both E3 and E15.** Split here as E3 owning the mechanism and E15 owning the surface. E15's header also says Tier 2 while the dependency diagram says it runs from Tier 1 — the diagram is right, since E3 cannot be played without a readable chart | E3-02, E3-05, E15-01, E15-02 | Tech |
 | 7 | **Gate 2 needs Gate 1's kit.** Gate 2 lives in E3 (Tier 1), but it needs four players and a lobby, which is Gate 1's line. Sequence is presumably Gate 1 → Gate 2 in the same window; worth stating, because "Gate 2 lives in E3" reads as though it comes first | E3-09, E19-05 | Owner |
 
+**Gap 5 is settled** — by building it rather than by ruling on it. E0-10 shipped as the split
+this table proposed: it asserts at L3 that a client disconnect leaves the host and the other
+clients working, and that a host teardown ends every client's session cleanly, and it stops
+there. Nothing in it re-forms a session, because that is E12-05's and E12-05 is explicit that
+there is no host migration. The two stories do not overlap, so there is nothing to merge.
+
 **Two existing open items bind earlier than the epics document expects:**
 
 - **Open item 6 — the employee-name fallback** is filed as *"with E5."* E12-06 needs it now, because

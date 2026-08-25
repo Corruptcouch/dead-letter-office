@@ -5,6 +5,19 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
+// One four-peer run at a time, for the whole assembly. EnetTransport.Port is a fixed 27377
+// (E0-02, deliberately: a host and three clients on one machine all want the same number), so
+// two runs cannot coexist - and xUnit parallelises across test classes by default, which is
+// exactly what a second scenario introduced. Measured 2026-08-25, before this line existed:
+// three runs at once produced clients that connected to another scenario's host and converged
+// on its value, then every peer timed out at 20 s. It reads as a network fault and it is a
+// scheduling one, which is why it is worth the sentence.
+//
+// The alternative - a port per run - would mean making a shipping constant configurable for
+// the benefit of the test suite. Serialising three runs that cost about a second each is the
+// cheaper side of that trade by a wide margin.
+[assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
+
 namespace Dlo.Net.Tests;
 
 /// <summary>
@@ -52,13 +65,17 @@ namespace Dlo.Net.Tests;
 /// pinned Godot and runs the L2 suite headless on <c>ubuntu-latest</c>.
 /// </para>
 /// </remarks>
-public sealed class FourPeerSession : IDisposable
+public abstract class FourPeerSession : IDisposable
 {
     /// <summary>The host peer's role name.</summary>
     public const string HostRole = "host";
 
-    /// <summary>The three client peers' role names.</summary>
-    public static readonly string[] ClientRoles = ["client1", "client2", "client3"];
+    /// <summary>
+    /// The three client peers' role names. The last is <see cref="Scenario.Leaver"/>, taken
+    /// from there rather than spelled again so the peer that decides to leave and the test
+    /// that asserts who left cannot drift apart.
+    /// </summary>
+    public static readonly string[] ClientRoles = ["client1", "client2", Scenario.Leaver];
 
     /// <summary>
     /// How long the harness waits for a peer to exit on its own. Longer than the peers' own
@@ -71,9 +88,12 @@ public sealed class FourPeerSession : IDisposable
     private readonly List<Process> _processes = [];
     private readonly Dictionary<Process, List<string>> _output = [];
 
-    /// <summary>Boots the four peers and waits for them.</summary>
-    public FourPeerSession()
+    /// <summary>Boots the four peers on one scenario and waits for them.</summary>
+    /// <param name="scenario">Which ending every peer in this run plays. See <see cref="Scenario"/>.</param>
+    protected FourPeerSession(string scenario)
     {
+        ScenarioName = scenario;
+
         var project = LocateProject(out var problem);
         if (project is null)
         {
@@ -93,14 +113,14 @@ public sealed class FourPeerSession : IDisposable
         // Godot writes .godot/ on a project's first run. Four processes racing to create it
         // is a flake that only ever fires on a cold clone, which is the worst place to meet
         // one. This pass takes no socket and exits immediately (Peer's idle role).
-        Launch(godot, project, "warmup").WaitForExit((int)_exitTimeout.TotalMilliseconds);
+        Launch(godot, project, "warmup", scenario).WaitForExit((int)_exitTimeout.TotalMilliseconds);
 
         var started = Stopwatch.StartNew();
         var peers = new List<(string Role, Process Process)>
         {
-            (HostRole, Launch(godot, project, HostRole)),
+            (HostRole, Launch(godot, project, HostRole, scenario)),
         };
-        peers.AddRange(ClientRoles.Select(role => (role, Launch(godot, project, role))));
+        peers.AddRange(ClientRoles.Select(role => (role, Launch(godot, project, role, scenario))));
 
         var deadline = DateTime.UtcNow + _exitTimeout;
         var outcomes = new List<PeerOutcome>();
@@ -126,6 +146,12 @@ public sealed class FourPeerSession : IDisposable
         Duration = started.Elapsed;
         Peers = outcomes;
     }
+
+    /// <summary>
+    /// Which ending this run played. Named <c>ScenarioName</c> rather than <c>Scenario</c> so
+    /// that <see cref="Scenario"/>'s constants stay reachable by their own name in here.
+    /// </summary>
+    public string ScenarioName { get; } = string.Empty;
 
     /// <summary>What stopped the run before it started, or <c>null</c> if it ran.</summary>
     /// <remarks>
@@ -159,7 +185,8 @@ public sealed class FourPeerSession : IDisposable
                 return SetupFailure;
             }
 
-            var text = new StringBuilder($"four-peer run took {Duration.TotalSeconds:F2}s");
+            var text = new StringBuilder(
+                $"four-peer `{ScenarioName}` run took {Duration.TotalSeconds:F2}s");
             foreach (var peer in Peers)
             {
                 text.AppendLine().Append(peer.Describe());
@@ -200,7 +227,7 @@ public sealed class FourPeerSession : IDisposable
         _processes.Clear();
     }
 
-    private Process Launch(string godot, string project, string role)
+    private Process Launch(string godot, string project, string role, string scenario)
     {
         var start = new ProcessStartInfo(godot)
         {
@@ -216,6 +243,7 @@ public sealed class FourPeerSession : IDisposable
         // Everything after `--` reaches the peer as OS.GetCmdlineUserArgs().
         start.ArgumentList.Add("--");
         start.ArgumentList.Add($"--dlo-role={role}");
+        start.ArgumentList.Add($"{Scenario.Argument}{scenario}");
 
         var process = new Process { StartInfo = start };
         var captured = new List<string>();
@@ -318,3 +346,16 @@ public sealed class FourPeerSession : IDisposable
         return null;
     }
 }
+
+/// <summary>E0-09's run: four peers converge on one value and end. Nothing goes wrong.</summary>
+public sealed class ConvergeRun() : FourPeerSession(Scenario.Converge);
+
+/// <summary>
+/// E0-10's first run: one client leaves mid-session and the other three keep working.
+/// </summary>
+public sealed class DepartureRun() : FourPeerSession(Scenario.Departure);
+
+/// <summary>
+/// E0-10's second run: the host tears the session down and every client ends its own cleanly.
+/// </summary>
+public sealed class HostLossRun() : FourPeerSession(Scenario.HostLoss);
