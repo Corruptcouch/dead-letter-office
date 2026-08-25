@@ -54,6 +54,19 @@
   </PropertyGroup>
 
   <!--
+    Makes L2 pick up .runsettings with no extra flag on the command line, so the README's
+    invocation stays `dotnet test tests/Dlo.Game.Tests`. That file is what tells the Godot
+    process GdUnit4 launches to run headless; read it before changing this.
+
+    It lives here rather than in Dlo.Game.Tests.csproj because that is a Godot project, and
+    Godot regenerates those - project references survive, custom properties do not (arch §1.4,
+    standards §2).
+  -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Dlo.Game.Tests'">
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory).runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+
+  <!--
     Warnings-as-errors in Dlo.Domain only (arch §2, standards §1). The Game layer
     compiles Godot's noisy generated glue, and failing the build on it means nobody
     can build. The enforced gate there is the suite instead.

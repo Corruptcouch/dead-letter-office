@@ -2,95 +2,229 @@
 
 A four-player co-op game about sorting mail in a facility that is not quite right.
 
-What the game is: [the vision](docs/dead-letter-office-vision.md). How it is built:
-[the architecture](docs/dead-letter-office-architecture.md). In what order:
-[the epics](docs/dead-letter-office-epics.md) and
-[the stories](docs/dead-letter-office-stories.md). How the code should look:
-[the coding standards](docs/CODING-STANDARDS.md).
-
-> **This file is a stub.** E14-09 owns the real README — setup from nothing in under ten
-> minutes, the pinned editor path per machine, and arch §1.4's gotchas. What is here is the
-> part standards §8 refuses to let wait: **the exact test invocations**. A missing invocation
-> is an E14 defect, not a convention to reinvent.
-
-## Toolchain
-
-| | |
+| Document | Normative for |
 | :-- | :-- |
-| .NET SDK | **10.0.400**, pinned exactly in `global.json` with `rollForward: disable` |
-| Godot | **4.7.2-stable-mono** — the version is pinned; the install path is machine-local |
-| Physics | Jolt, set explicitly in `project.godot` (arch §1.4) |
+| [Vision](docs/dead-letter-office-vision.md) | what the game is |
+| [Architecture](docs/dead-letter-office-architecture.md) | how it is built |
+| [Epics](docs/dead-letter-office-epics.md) · [Stories](docs/dead-letter-office-stories.md) | in what order |
+| [Coding standards](docs/CODING-STANDARDS.md) | how the code should look |
+| [AGENTS.md](AGENTS.md) | the laziness ladder — read before writing anything |
 
-Every project targets `net10.0`, overriding the `net8.0` Godot generates. That is a decision,
-not an oversight — `Directory.Build.props` carries the reasoning.
+---
 
-**This machine's Godot:** `D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`. Export templates for
-4.7.2 are **not yet installed**; E18-01 needs them.
+## Get to green
 
-## Build
+**Target: from nothing to "built, both suites green" in under ten minutes.** If it takes you
+longer, that is a defect in this file — say so.
 
-```
-dotnet build dlo.sln
-```
+### 1. Install the two pinned tools
+
+| | Version | Where |
+| :-- | :-- | :-- |
+| .NET SDK | **exactly 10.0.400** | <https://dotnet.microsoft.com/download/dotnet/10.0> |
+| Godot | **4.7.2-stable-mono** (the .NET build, not the standard one) | <https://godotengine.org/download/archive/> |
+
+Both versions are pinned, and neither pin is a preference:
+
+- `global.json` names the SDK exactly, with `rollForward: disable`. This machine has four SDKs
+  installed (8.0.424, 9.0.315, 10.0.204, 10.0.400) and without the pin `dotnet` silently takes
+  the highest. A build that differs between two developers because nobody chose is the failure
+  that file exists to prevent — so if `dotnet build` says the SDK is missing, install that
+  version rather than editing `global.json`.
+- The editor version is pinned because export templates are versioned with it, and because a
+  mismatch shows up as `project.godot` churn and export failures rather than as a build error.
+
+Godot needs no installer. Unzip it somewhere and remember the path — **that path is
+machine-local and belongs here, not in a committed file.**
+
+> **On this machine:** `D:\work\Godot\Godot_v4.7.2-stable_mono_win64\`
+> Add your own line when you set the project up somewhere else.
+
+### 2. Clone and build
+
+    git clone https://github.com/Corruptcouch/dead-letter-office.git
+    cd dead-letter-office
+    dotnet build dlo.sln
+
+No `git lfs pull` needed — see [Git LFS](#git-lfs) for why, and for what it looks like when
+that stops being true.
+
+### 3. Point the tests at Godot
+
+The engine suite launches a real editor process, so it needs to know where the editor is:
+
+    # Windows (bash / Git Bash)
+    export GODOT_BIN="D:/work/Godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+
+    # Windows (PowerShell)
+    $env:GODOT_BIN = "D:\work\Godot\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe"
+
+    # Linux / macOS
+    export GODOT_BIN="/path/to/Godot_v4.7.2-stable_mono_linux.x86_64"
+
+**Use the `_console` executable on Windows.** The plain one detaches from the terminal and the
+test runner's output goes nowhere, which reads as a hang.
+
+Like the editor path itself this is machine-local, which is why it is an environment variable
+and not a committed `.runsettings`.
+
+### 4. Run both suites
+
+    dotnet test dlo.sln
+
+Expect **7 passing tests** across two suites in 15–20 seconds. That is the whole check.
+
+---
 
 ## Tests
 
-Three levels (arch §10.1). Run from the repo root.
+Three levels ([architecture §10.1](docs/dead-letter-office-architecture.md)). **A missing
+invocation here is an E14 defect** (standards §8) — raise it rather than reinventing the
+command.
 
 | Level | Scope | Command | Budget |
 | :-- | :-- | :-- | :-- |
-| **L1** | Domain, no engine | `dotnet test tests/Dlo.Domain.Tests` | **< 5 s** (arch §8) |
+| **L1** | Domain, no engine | `dotnet test tests/Dlo.Domain.Tests` | **< 5 s** |
 | **L2** | GdUnit4, in engine | `dotnet test tests/Dlo.Game.Tests` | seconds |
 | **L3** | Headless host + 3 clients | *arrives with E0-09* | minutes |
+| **both** | L1 + L2 together | `dotnet test dlo.sln` | — |
 
-**L2 needs `GODOT_BIN` set, per machine.** It is the path to the pinned editor, and like the
-editor path itself it is machine-local, so it is an environment variable rather than a
-committed `.runsettings`. On this machine:
+L2 and `dotnet test dlo.sln` need `GODOT_BIN` set. L1 does not — it never starts an engine,
+which is the entire point of the Domain boundary.
 
-```
-export GODOT_BIN="D:/work/Godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
-```
+The **architecture test** ([arch §10.5](docs/dead-letter-office-architecture.md) — `Dlo.Domain`
+does not reference `GodotSharp`) is an L1 test and needs no invocation of its own. CI also runs
+it by name, so a reversed dependency arrow shows up as an unmistakable red step rather than as
+one line inside another suite's output.
 
-Use the `_console` executable: the plain one detaches from the terminal and the runner's
-output goes nowhere.
+**L1 baseline, measured 2026-08-24 with 3 tests:** 24 ms of test execution; 2.4 s wall clock
+from a cleaned `bin`/`obj`, 1.3 s with `--no-build`. Recorded so the next measurement is a
+comparison rather than an argument.
 
-**In-editor L2 is not wired up yet.** E14-05 asks for both invocations; only the CLI one
-above exists and is verified. Running GdUnit4 from inside the editor additionally needs its
-Godot addon installed in `tests/Dlo.Game.Tests/`, which is a click in the editor and has not
-been done. Nothing depends on it — CI uses the CLI — but the story is not closed until it is.
-
-### Three L2 gotchas, each of which costs an afternoon alone
+### Four L2 gotchas, each of which costs an afternoon alone
 
 1. **`[RequireGodotRuntime]` on every test class that touches a Godot type.** Without it
-   GdUnit4 picks its "Default Test Runner", executes the suite in the plain VSTest host with
-   no engine behind it, and the first native call dies as `0xC0000005` with a stack trace that
-   names no cause. It does not say what is wrong. Nothing does.
+   GdUnit4 picks its "Default Test Runner", executes the suite in the plain VSTest host with no
+   engine behind it, and the first native call dies as `0xC0000005` with a stack trace that
+   names no cause. Nothing tells you what is wrong.
 2. **`tests/Dlo.Game.Tests/` is its own Godot project**, because the adapter runs
    `godot --path .` from wherever it finds the `.csproj`. Its `res://` is therefore that
-   directory — **the game's scenes are not reachable from an L2 test.** Tests build nodes in
-   code. *ponytail: the ceiling is that a `.tscn` under `src/Dlo.Game/` cannot be loaded in
-   L2, which E1-02's controller scene will want. The upgrade is to emit the test assembly into
+   directory — **the game's scenes are not reachable from an L2 test**, so tests build nodes in
+   code. *ponytail: the ceiling is that a `.tscn` under `src/Dlo.Game/` cannot be loaded in L2,
+   which E1-02's controller scene will want. The upgrade is to emit the test assembly into
    `src/Dlo.Game`'s output so the adapter finds the game project instead — deferred because
    nothing needs it yet.*
 3. **Godot rewrites `Dlo.Game.Tests.csproj` if its `<TargetFramework>` line is missing**,
    putting back `net8.0` in CRLF, mid-test-run. Both Godot projects pin `net10.0` in their own
    csproj for this reason. Do not tidy it into `Directory.Build.props`.
+4. **GdUnit4 does not run Godot headless for you, and the error says something else entirely.**
+   It launches Godot twice: the compile pass passes `--headless`, the test-runner pass does
+   not. Anywhere without a display — any CI runner — Godot fails to create a window and exits
+   1, and because the process is gone the adapter reports:
 
-The **architecture test** (arch §10.5 — `Dlo.Domain` does not reference `GodotSharp`) is an
-L1 test and needs no invocation of its own. It runs with the command above.
+       GdUnit4 Godot Runtime Test Runner ends with exit code: 1
+       Failed to connect: Connection timeout
 
-**L1 baseline, measured on the development machine 2026-08-24 with 3 tests in the suite:**
-24 ms of test execution; 2.4 s wall clock for `dotnet test` from a cleaned `bin`/`obj`,
-1.3 s with `--no-build`. The budget is the suite, and the suite has 4.97 s of headroom left.
-The number is recorded here so the next measurement is a comparison rather than an argument.
+   **That message points at the network. The problem is the display.** Anyone who trusts it
+   loses the afternoon to firewalls and ports. `.runsettings` supplies `--headless` and
+   `Directory.Build.props` wires it in, so the command needs no flag — but if you ever see
+   that pair of lines again, read them as "the Godot process died before it could accept a
+   connection" and go and find out why it died.
 
-## Formatting
+**In-editor L2 is not wired up yet.** Running GdUnit4 from inside the editor needs its Godot
+addon installed in `tests/Dlo.Game.Tests/`, which is a click nobody has made. Nothing depends
+on it — CI uses the CLI — but E14-05 is not closed until it is done.
 
-`.editorconfig` is the authority, and this is the gate:
+---
 
-```
-dotnet format --verify-no-changes
-```
+## Working in the editor
+
+Open `src/Dlo.Game/project.godot` in **Godot 4.7.2-stable-mono**.
+
+### Gotchas — read before you fight the tooling
+
+These are [arch §1.4](docs/dead-letter-office-architecture.md), abbreviated. Each has already
+cost someone an afternoon, or was found by probing specifically so it would not.
+
+- **C# hot reload does not pick up changes in referenced assemblies.** When you change anything
+  in `Dlo.Domain`, **restart the editor.** This is normal, it is not your setup, and it is the
+  single most common way to lose an afternoon on this project.
+- **Godot regenerates `Dlo.Game.csproj`.** Project references survive; custom MSBuild
+  properties do not. All custom config lives in `Directory.Build.props` at the repo root.
+- **`<TargetFramework>net10.0</TargetFramework>` in the two Godot csproj files is deliberate.**
+  Godot generates `net8.0` and we override it — and Godot re-adds the line as `net8.0` whenever
+  it finds it *missing*, so the override cannot live in `Directory.Build.props` for those two.
+  Read the comment in that file before "fixing" this.
+- **`project/solution_directory="../.."` stays in `project.godot`.** Without it the exporter
+  finds no solution and refuses every C# source at export time.
+- **`dlo.sln` is the only solution**, and it must stay that way. If a second one containing the
+  `Dlo.Game` assembly appears under the solution directory, Godot's editor plugin refuses to
+  start — no build, no export, no C# in the editor at all.
+- **`physics/3d/physics_engine="Jolt Physics"` is set explicitly** and must stay. A fresh 4.7.2
+  project leaves it at `DEFAULT`, which names a resolution order rather than an engine, and
+  every tuning number in arch §8 assumes Jolt.
+- **Godot cannot create the C# project from the command line.** It is strictly
+  *Project → Tools → C# → Create C# solution*, once, by hand. Only matters if you bootstrap a
+  new Godot project; ours is committed.
+
+### Export templates
+
+**Templates are versioned with the editor and must match it exactly.** They are not needed to
+build or to run either suite — only to export.
+
+> **On this machine they are missing.** Installed: `4.6.stable.mono`. Required:
+> `4.7.2.stable.mono`. Install via *Editor → Manage Export Templates*. **E18-01 fails on its
+> first attempt until this is done**, and export is also the one leg of the `net10.0` override
+> that has never been verified — it would fail as a silent refusal of every C# source rather
+> than as a build error.
+
+---
+
+## Git LFS
+
+`.png`, `.jpg`, `.wav`, `.ogg`, `.glb`, `.fbx`, fonts and friends are LFS-tracked. **`.tres` is
+deliberately not** — content files must stay diffable or E13's authoring pipeline loses code
+review entirely, and a routing policy you cannot read in a PR is a routing policy nobody checks.
+
+Both halves are verified rather than assumed (E14-08, 2026-08-24): a checked-in `.png` stored
+as a 70-byte pointer, and a checked-in `.tres` stored as text whose diff read as
+`-mass_kg = 2.5` / `+mass_kg = 3.1`.
+
+Line endings are LF in the repository *and* in the working tree on every platform, via
+`* text=auto eol=lf`. `core.autocrlf` is per-machine and this project cannot depend on four
+people configuring it identically — and `dotnet format --verify-no-changes` fails against a
+CRLF working tree, so without this a fresh Windows clone fails a check CI reports green.
+
+### What a clone that skipped `git lfs pull` looks like
+
+**Today: nothing. There are no binary assets yet, and a fresh clone builds and runs both suites
+with no LFS fetch at all.** CI actively protects that — its checkout step deliberately does
+*not* set `lfs: true`, so the promise stays tested rather than assumed.
+
+It stays true longer than you would expect, because placeholders are **generated** rather than
+committed (E17-03). So when this does bite it will be rare enough to be baffling, which is
+exactly why it is written down in advance:
+
+- Files are present with the right names, but each is **a few hundred bytes of text** beginning
+  `version https://git-lfs.github.com/spec/v1`.
+- Godot logs import failures for them, or imports them as blank. **Textures render as nothing
+  rather than as a missing-texture pattern**, so it reads as a lighting or material bug rather
+  than as a missing file.
+- The build stays green throughout. Nothing about it looks like a fetch problem.
+
+The fix is `git lfs install` once per machine, then `git lfs pull`.
+
+---
+
+## Formatting and CI
+
+`.editorconfig` is the formatting authority, and this is the gate:
+
+    dotnet format --verify-no-changes
 
 If a formatting question ever reaches a human, `.editorconfig` is missing a rule — fix the
 file, not the PR.
+
+[CI](.github/workflows/ci.yml) runs restore, build, format, L1, the architecture test and L2 on
+every push. L3 arrives with E0-09 and will run on merge only; `ContentTool validate` arrives
+with E13-06.

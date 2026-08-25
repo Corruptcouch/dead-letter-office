@@ -76,6 +76,11 @@ jobs:
             exit 1
           fi
           chmod +x "$bin"
+          # Smoke check before anything depends on it. If the runner image is missing a
+          # library Godot needs, it fails HERE with the loader's own message, instead of
+          # later as "Failed to connect: Connection timeout" from the test adapter - which
+          # points at the network and is the wrong thing to go and debug.
+          "$bin" --headless --version
           echo "GODOT_BIN=$bin" >> "$GITHUB_ENV"
 
       - name: L2 - engine suite
@@ -90,9 +95,16 @@ jobs:
 # Every step here was verified on Windows only. Three things differ on ubuntu-latest and
 # none of them could be checked from the development machine:
 #
-#   1. Godot headless on a bare runner may need system libraries the image lacks. If the
-#      L2 step dies before any test reports, that is this - add the missing package rather
-#      than dropping the step.
+#   1. FIXED, 2026-08-24, first real run. Godot needs to be told to run headless, and
+#      GdUnit4 does not do it for you: its compile pass passes --headless, its test-runner
+#      pass does not. With no display the process exits 1 and the adapter reports "Failed to
+#      connect: Connection timeout", which points at the network rather than at the display.
+#      The fix is <Parameters>--headless</Parameters> in .runsettings, wired in through
+#      Directory.Build.props so no command line changes. Reproduced locally before fixing, by
+#      making Godot quit early and watching the identical error appear.
+#      What may still be true underneath it: the runner image could also lack a library Godot
+#      needs. The install step now runs `--version` up front so that failure is separated
+#      from this one.
 #   2. `dotnet format --verify-no-changes` is line-ending sensitive. .editorconfig sets LF
 #      and E14-08's .gitattributes must normalise to match, or this goes red on Linux while
 #      staying green on Windows for exactly the reason global.json exists.

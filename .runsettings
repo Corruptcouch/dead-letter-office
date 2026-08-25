@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  L2 run settings, applied automatically: Directory.Build.props points Dlo.Game.Tests at this
+  file via RunSettingsFilePath, so `dotnet test` needs no extra flag and the invocation in the
+  README stays one command.
+
+  Parameters below are appended to the Godot process GdUnit4 launches to RUN tests. Its
+  separate compile pass already runs headless; the test-runner pass does not, and on a CI
+  runner with no display that kills the process and surfaces as a connection timeout.
+  Observed on ubuntu-latest, 2026-08-24. The README's "Three L2 gotchas" section has the
+  full account, including why the error message points at the wrong thing.
+
+  Applied everywhere and not only in CI, deliberately: local and CI running the same command
+  with different arguments is how a suite goes green on the machine nobody works on.
+-->
+
+<RunSettings>
+  <GdUnit4>
+    <Parameters>--headless</Parameters>
+  </GdUnit4>
+</RunSettings>
