@@ -16,6 +16,9 @@ namespace Dlo.Game.Carry;
 /// </remarks>
 public partial class Carryable : RigidBody3D
 {
+    /// <summary>The group every parcel body joins, so a conveyor can find one (E4-01).</summary>
+    public const string Group = "parcels";
+
     /// <summary>
     /// Which parcel this node is showing. <c>default</c> means it is not a parcel at all — a
     /// prop, or a test fixture — and the host treats it as unlocked and one-person.
@@ -50,6 +53,29 @@ public partial class Carryable : RigidBody3D
     public float GripHalfWidth { get; set; } = 0.5f;
 
     /// <summary>
+    /// Arch §3.4's rail tuple: <c>(beltId, distanceAlong, lane)</c>, or zero when this parcel is
+    /// not riding anything.
+    /// </summary>
+    /// <remarks>
+    /// <b>Written once, when the parcel joins a belt, and never again while it rides.</b> The
+    /// running distance lives on the conveyor, not here, because this property is watched: moving
+    /// it every frame would turn the cheapest replication class into the most expensive one.
+    /// <para>
+    /// Twelve bytes against arch §3.4's "~6 bytes", and it is sent once per parcel rather than
+    /// per frame, so it does not touch the streaming budget its arithmetic is about. Packing
+    /// belt, lane and decimetres into one int is the upgrade if E4-10 ever finds it matters.
+    /// </para>
+    /// </remarks>
+    [Export]
+    public Vector3 Rail { get; set; }
+
+    /// <summary>
+    /// This parcel's synchronizer, which <see cref="Net.Replication.Apply"/> reconfigures as the
+    /// parcel changes class. Built here so a parcel always has exactly one.
+    /// </summary>
+    public MultiplayerSynchronizer Synchronizer { get; private set; } = null!;
+
+    /// <summary>
     /// The node a client may move to fake holding this (arch §3.3). Meshes hang under it.
     /// </summary>
     /// <remarks>
@@ -62,10 +88,22 @@ public partial class Carryable : RigidBody3D
     /// </remarks>
     public Node3D Visual { get; private set; } = null!;
 
+    /// <summary>Where the rail tuple lives, for a synchronizer's replication config.</summary>
+    public static NodePath RailProperty => new($".:{PropertyName.Rail}");
+
+    /// <summary>Where the transform lives, for a synchronizer's replication config.</summary>
+    public static NodePath TransformProperty => new($".:{PropertyName.Position}");
+
     /// <inheritdoc/>
     public override void _Ready()
     {
         Visual = GetNodeOrNull<Node3D>("Visual") ?? Attach();
+        Synchronizer = GetNodeOrNull<MultiplayerSynchronizer>("Sync") ?? Sync();
+
+        // A conveyor finds the parcels it should be carrying by looking here (E4-01). Joining
+        // in _Ready rather than on entry means a parcel spawned already railed - which is what
+        // a client gets - is found without a second message.
+        AddToGroup(Group);
     }
 
     /// <summary>Where carrier <paramref name="slot"/> holds, in this body's local space.</summary>
@@ -81,5 +119,16 @@ public partial class Carryable : RigidBody3D
         var visual = new Node3D { Name = "Visual" };
         AddChild(visual);
         return visual;
+    }
+
+    private MultiplayerSynchronizer Sync()
+    {
+        var sync = new MultiplayerSynchronizer { Name = "Sync" };
+        AddChild(sync);
+
+        // Dynamic until something says otherwise: a loose parcel is the class that has to be
+        // right by default, because the cheap classes are only correct when they are earned.
+        Net.Replication.Apply(sync, Net.ReplicationClass.Dynamic, TransformProperty, RailProperty);
+        return sync;
     }
 }

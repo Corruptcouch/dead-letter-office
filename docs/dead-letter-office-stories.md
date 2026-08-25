@@ -30,10 +30,10 @@ marked as such instead of being rounded up.
 | **E14** Foundation | **8 done**, 1 partial | Complete bar E14-07's deliberate-failure run |
 | **E0** Netcode spine | **8 done**, 2 blocked | Spine is in and L3-proven. Steam is the only hole |
 | **E1** Embodiment | **9 done**, 1 blocked | Feature work complete. **Only Gate 0 itself is left** |
-| **E2 · E3 · E4** Tier 1 | **5 done** of 30 | All of E2 that no other epic blocks. What is left needs **E4-01**, or is post-MVP |
+| **E2 · E3 · E4** Tier 1 | **7 done** of 30 | E2's spine and E4's belt. **E2-05 and E4-03 are unblocked today**; E3 is untouched |
 | **Alongside** E12·13·15·17·18·19 | **3 done**, 2 partial of 29 | E13's spine is in and validated in CI. **E15-04 and E19-01/02 still block Gate 0** |
 
-**33 of 88 decomposed stories are done.** Suite: **L1 66 · L2 91 · L3 41**, all green,
+**35 of 88 decomposed stories are done.** Suite: **L1 66 · L2 105 · L3 41**, all green,
 `dotnet format` clean, and `ContentTool validate` green on the authored content.
 
 The five that fall short, all named rather than rounded up:
@@ -863,17 +863,29 @@ redesign.
 *A believable postal facility whose architecture already leaves room for something stranger.*
 
 #### E4-01 · Conveyors and rails
-**Depends:** E14-03, E0-06 · **Test:** L2
+**Depends:** E14-03, E0-06 · **Test:** L2 · **Status:** ✅ **Done**
 
 The mechanism that makes "the belt never stops" affordable.
 
-- [ ] A parcel entering a belt becomes `Railed`: a spline, a speed and a lane, sent once (Arch §3.4).
-- [ ] Clients extrapolate with **no ongoing traffic** — asserted by measuring traffic, not by
-      reading the code.
-- [ ] **The belt does not stop and does not despawn its backlog.** Parcels accumulate at the end,
+- [x] A parcel entering a belt becomes `Railed`: a spline, a speed and a lane, sent once (Arch §3.4).
+      `Conveyor.Accept` writes `Carryable.Rail` — `(beltId, distanceAlong, lane)` — exactly once and
+      applies the `Railed` class. **The running distance lives on the conveyor, not on the parcel**,
+      because the tuple is a watched property and advancing it there would turn the cheapest class
+      into the most expensive one.
+- [x] Clients extrapolate with **no ongoing traffic** — asserted by measuring traffic, not by
+      reading the code. `ReplicationMeter` reads the synchronizer's own config, samples the values
+      it would send, and reports changes, bytes and streaming properties. Over 30 frames of a
+      moving railed parcel: **0 changes, 0 bytes, 0 streaming**, with the parcel's travel asserted
+      in the same test so a stationary parcel cannot pass it. A loose parcel is metered alongside
+      as the control, so a broken instrument reads as a failure rather than as a pass.
+- [x] **The belt does not stop and does not despawn its backlog.** Parcels accumulate at the end,
       because accumulation is the design keystone (vision §2), not an overflow condition to handle.
-- [ ] Carries Arch §2's `ponytail:` comment on constant-speed extrapolation verbatim, with its
-      ceiling and its upgrade path.
+      Four parcels run to the end, all four are still carried, the front one pins to the belt's
+      length, and each queues exactly `Spacing` behind the next. Proved by breaking it: removing
+      the spacing ceiling reddens the test.
+- [x] Carries Arch §2's `ponytail:` comment on constant-speed extrapolation verbatim, with its
+      ceiling and its upgrade path. A second `ponytail:` names the adoption scan's cost, which is
+      how a client picks a parcel up from the tuple alone with no second message.
 
 #### E4-02 · Chutes
 **Depends:** E4-01, E3-04 · **Test:** L2 + L1
@@ -894,12 +906,21 @@ The mechanism that makes "the belt never stops" affordable.
       inspection.
 
 #### E4-04 · Doors
-**Depends:** E14-03 · **Test:** L2
+**Depends:** E14-03 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] Open/closed state is host-authoritative.
-- [ ] A door can be added, moved or removed by E9's mutations **without a new class** (Arch §4.1).
-- [ ] A door cannot permanently trap a player; invalid state recovers rather than disabling the node
-      forever (Standards §10).
+- [x] Open/closed state is host-authoritative. `Open` and `Shut` are no-ops off the host, and
+      `IsOpen` is the **only** replicated fact about a door — the leaf's position is derived from
+      it on every peer. Metered: a full open costs **one change and nothing streaming**, which is
+      arch §3.4's reasoning applied outside the belt.
+- [x] A door can be added, moved or removed by E9's mutations **without a new class** (Arch §4.1).
+      Travel, speed and opening size are exports, so a sliding hatch and a rising shutter are the
+      same type configured differently — asserted, along with removing one mid-travel while the
+      rest of the facility keeps running.
+- [x] A door cannot permanently trap a player; invalid state recovers rather than disabling the node
+      forever (Standards §10). A body in the doorway makes the host reopen on the next frame, and
+      **the recovery is not a latch** — it shuts normally once they step out. Proved by breaking
+      it. A non-finite `Openness` is walked back into range rather than sticking, because the
+      failure this criterion is really about is a door nobody can open again.
 
 #### E4-05 · Layer 2 greybox
 **Depends:** E4-01, E4-02, E4-04 · **Test:** playtest evidence, no suite
@@ -1292,11 +1313,17 @@ Read off the dependency graph, not off preference. Everything here has its depen
 
 **Unblocked and off that path**, worth picking up alongside:
 
-- **E4-01** Conveyors and rails — the biggest unlock left on this side. It blocks **E2-05**, and
-  through it E2-09 and E2-10; it is where E13-01's missing log line goes; and it is the first
-  story that pools a parcel into a live shift, which is what turns `GrabDirector`'s scene-path
-  addressing from a latent bug into a real one. That `ponytail:` names E4-01 as the line it must
-  not cross.
+- **E2-05** Replication classes with promotion and demotion — unblocked by E4-01, and the belt
+  already has both halves in reach: `Conveyor.Accept` promotes into `Railed` and `Release` hands a
+  parcel back to physics. What is owed is the demotion to `Sleeping` when Jolt reports rest, and
+  the L3 proof over a real socket. **`ReplicationMeter` is the instrument it needs**, and it
+  exists. Through it: E2-09 and E2-10.
+- **E4-03** Pneumatic tubes — unblocked by E4-01 and E2-02. A parcel in transit is `(tubeId, eta)`
+  with **no body at all**, which is the strongest test the identity work has: E2-02 proved a
+  record outlives its node, and this is the story that relies on it in flight.
+- **`GrabDirector`'s scene-path addressing** — E4-01 landed the belt but nothing yet pools a parcel
+  into a live shift, so the ponytail's ceiling is still one story away. **E4-05 is the line**: a
+  greybox with a running belt is where a recycled body first gets renamed under a grab.
 - **E13-04** Signage table — needs only E13-02, which is done, and it is the smallest story left
   in E13. **E13-07**, the authoring guide, needs only E13-05 and is the epic's actual thesis
   (vision §13): it is allowed to be bad, it is not allowed to be missing.
