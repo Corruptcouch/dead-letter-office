@@ -1,0 +1,101 @@
+# E14-07. Every push: restore, build, format, L1, the architecture test, L2.
+#
+# Not here yet, deliberately (arch §10.6):
+#   - L3 (Dlo.Net.Tests) arrives with E0-09 and runs on merge only, because it is minutes
+#     rather than seconds. A per-push suite that takes minutes is a suite people learn to
+#     ignore.
+#   - `ContentTool validate` arrives with E13-06, which is the story that makes a broken
+#     content file fail the build.
+#
+# OWED, and E14-07 is not closed until it is done: nobody has watched this pipeline FAIL.
+# Every step below was run in order on a Windows development machine, from a cold checkout
+# state, and all pass - but "green locally" is not the same claim as "this workflow works",
+# and a pipeline nobody has seen go red is not known to work at all. The check is to push a
+# deliberately failing test on a scratch branch (any push triggers this), confirm the run is
+# red for that reason and not another, and delete the branch. Deferred by decision, not
+# forgotten. The Linux-specific risks are listed at the bottom of this file.
+
+name: CI
+
+on: [push, pull_request]
+
+env:
+  # The editor version is pinned (standards §1). It must match what developers run, or
+  # project.godot churns and exports fail in ways that do not look like build errors.
+  GODOT_VERSION: 4.7.2-stable
+  GODOT_ARCHIVE: Godot_v4.7.2-stable_mono_linux_x86_64
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        # Deliberately no `lfs: true`. E17-03 requires that a fresh clone builds and runs
+        # with no LFS fetch at all, and the only way that promise stays true is if CI keeps
+        # proving it. Turning LFS on here would hide the exact regression it guards against.
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          # Reads the exact SDK from global.json rather than restating it. Two places to
+          # change a pinned version is one place too many.
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore dlo.sln
+
+      - name: Build
+        run: dotnet build dlo.sln --no-restore
+
+      - name: Format
+        # .editorconfig is the formatting authority (standards §1). If this is ever red, the
+        # fix is `dotnet format`, not a discussion.
+        run: dotnet format --verify-no-changes
+
+      - name: L1 - Domain suite
+        run: dotnet test tests/Dlo.Domain.Tests --no-build
+
+      - name: Architecture test
+        # Already inside L1, and run again by name on purpose: when the Dlo.Game -> Dlo.Domain
+        # dependency arrow reverses, the failure should be unmistakable rather than one line
+        # inside another suite's output. Standards §8: the architecture test is not decoration,
+        # and when it fails the fix is never to relax it.
+        run: dotnet test tests/Dlo.Domain.Tests --no-build --filter "FullyQualifiedName~ArchitectureTests"
+
+      - name: Install Godot ${{ env.GODOT_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/${GODOT_ARCHIVE}.zip"
+          unzip -q godot.zip -d "$RUNNER_TEMP/godot"
+          # Located rather than hardcoded: if Godot changes its archive layout, this fails
+          # here with a clear message instead of somewhere inside the test adapter.
+          bin=$(find "$RUNNER_TEMP/godot" -type f -name 'Godot_v*_mono_linux.x86_64' | head -1)
+          if [ -z "$bin" ]; then
+            echo "No Godot binary inside ${GODOT_ARCHIVE}.zip - archive layout changed."
+            exit 1
+          fi
+          chmod +x "$bin"
+          echo "GODOT_BIN=$bin" >> "$GITHUB_ENV"
+
+      - name: L2 - engine suite
+        # No --no-build: GdUnit4 installs its runner scene into the Godot project on first
+        # run and needs Godot to compile it, so the assembly is not final until then (E14-05).
+        run: dotnet test tests/Dlo.Game.Tests
+
+# ---------------------------------------------------------------------------
+# What is most likely to be red on the first run, in order
+# ---------------------------------------------------------------------------
+#
+# Every step here was verified on Windows only. Three things differ on ubuntu-latest and
+# none of them could be checked from the development machine:
+#
+#   1. Godot headless on a bare runner may need system libraries the image lacks. If the
+#      L2 step dies before any test reports, that is this - add the missing package rather
+#      than dropping the step.
+#   2. `dotnet format --verify-no-changes` is line-ending sensitive. .editorconfig sets LF
+#      and E14-08's .gitattributes must normalise to match, or this goes red on Linux while
+#      staying green on Windows for exactly the reason global.json exists.
+#   3. The L2 step lets GdUnit4 install and compile its runner scene inside the Godot
+#      project during the run. That was verified from a cold state locally (no runner, no
+#      .godot, no obj) and took ~15s, but it is the step with the most moving parts.
