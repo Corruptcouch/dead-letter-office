@@ -7,13 +7,16 @@
 #   - `ContentTool validate` arrives with E13-06, which is the story that makes a broken
 #     content file fail the build.
 #
-# OWED, and E14-07 is not closed until it is done: nobody has watched this pipeline FAIL.
-# Every step below was run in order on a Windows development machine, from a cold checkout
-# state, and all pass - but "green locally" is not the same claim as "this workflow works",
-# and a pipeline nobody has seen go red is not known to work at all. The check is to push a
-# deliberately failing test on a scratch branch (any push triggers this), confirm the run is
-# red for that reason and not another, and delete the branch. Deferred by decision, not
-# forgotten. The Linux-specific risks are listed at the bottom of this file.
+# GREEN on ubuntu-latest as of 2026-08-24, after one red run and one fix. What that run
+# settled, and what it did not, is recorded at the bottom of this file - it is worth reading
+# once, because two of the things it proved are promises other stories depend on.
+#
+# STILL OWED, and E14-07 is not closed until it is done: nobody has watched this pipeline
+# FAIL on purpose. Green proves the happy path; it does not prove the pipeline can report a
+# failure, and a pipeline nobody has seen go red is not known to work as a gate. The check is
+# to push a deliberately failing test on a scratch branch (any push triggers this), confirm
+# the run is red for that reason and not another, and delete the branch. Deferred by
+# decision, not forgotten.
 
 name: CI
 
@@ -89,25 +92,33 @@ jobs:
         run: dotnet test tests/Dlo.Game.Tests
 
 # ---------------------------------------------------------------------------
-# What is most likely to be red on the first run, in order
+# What the first CI runs actually settled
 # ---------------------------------------------------------------------------
 #
-# Every step here was verified on Windows only. Three things differ on ubuntu-latest and
-# none of them could be checked from the development machine:
+# Three things differed on ubuntu-latest and none could be checked from the Windows
+# development machine. All three now have an answer from a real run rather than an argument.
 #
-#   1. FIXED, 2026-08-24, first real run. Godot needs to be told to run headless, and
-#      GdUnit4 does not do it for you: its compile pass passes --headless, its test-runner
-#      pass does not. With no display the process exits 1 and the adapter reports "Failed to
-#      connect: Connection timeout", which points at the network rather than at the display.
-#      The fix is <Parameters>--headless</Parameters> in .runsettings, wired in through
-#      Directory.Build.props so no command line changes. Reproduced locally before fixing, by
+#   1. Godot headless. RED on the first run, then fixed. GdUnit4 launches Godot twice: the
+#      compile pass passes --headless, the test-runner pass does not. With no display the
+#      process exits 1, and because it is gone the adapter reports "Failed to connect:
+#      Connection timeout" - which points at the network and is the wrong thing to debug.
+#      Read that pair of lines as "the Godot process died before it could accept a
+#      connection". Fixed by <Parameters>--headless</Parameters> in .runsettings, wired in
+#      through Directory.Build.props so no command line changes. Reproduced locally first, by
 #      making Godot quit early and watching the identical error appear.
-#      What may still be true underneath it: the runner image could also lack a library Godot
-#      needs. The install step now runs `--version` up front so that failure is separated
-#      from this one.
-#   2. `dotnet format --verify-no-changes` is line-ending sensitive. .editorconfig sets LF
-#      and E14-08's .gitattributes must normalise to match, or this goes red on Linux while
-#      staying green on Windows for exactly the reason global.json exists.
-#   3. The L2 step lets GdUnit4 install and compile its runner scene inside the Godot
-#      project during the run. That was verified from a cold state locally (no runner, no
-#      .godot, no obj) and took ~15s, but it is the step with the most moving parts.
+#
+#   2. Line endings. GREEN, and this is the one worth noticing. `dotnet format
+#      --verify-no-changes` passing on Linux is the first cross-platform evidence that
+#      E14-08's `* text=auto eol=lf` actually holds - until this run, "a Windows clone and a
+#      Linux clone produce identical diffs" had been measured on Windows alone, which is to
+#      say not measured at all. The claim is now tested on every push, which is the only
+#      place a line-endings promise can survive.
+#
+#   3. GdUnit4's runner scene. GREEN. The adapter installs and compiles it inside the Godot
+#      project during the L2 step, on a fresh checkout where the directory does not exist and
+#      is gitignored. It was the step with the most moving parts and it needed none of them
+#      pinned down.
+#
+#   Also settled in passing: the runner image has whatever shared libraries Godot needs. The
+#   `--version` smoke check in the install step is what will say otherwise if that changes,
+#   and it now separates that failure from anything the test adapter reports.

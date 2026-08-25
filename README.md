@@ -14,8 +14,9 @@ A four-player co-op game about sorting mail in a facility that is not quite righ
 
 ## Get to green
 
-**Target: from nothing to "built, both suites green" in under ten minutes.** If it takes you
-longer, that is a defect in this file — say so.
+**From nothing to "built, both suites green" in under ten minutes** — timed against someone
+following only this file, 2026-08-24. That is a measurement, not an aspiration, which means it
+can regress: if it takes you longer, that is a defect in this file. Say so.
 
 ### 1. Install the two pinned tools
 
@@ -90,7 +91,8 @@ command.
 | **both** | L1 + L2 together | `dotnet test dlo.sln` | — |
 
 L2 and `dotnet test dlo.sln` need `GODOT_BIN` set. L1 does not — it never starts an engine,
-which is the entire point of the Domain boundary.
+which is the entire point of the Domain boundary. L2 also runs from an IDE test explorer, with
+breakpoints — see [Running L2 from the editor](#running-l2-from-the-editor).
 
 The **architecture test** ([arch §10.5](docs/dead-letter-office-architecture.md) — `Dlo.Domain`
 does not reference `GodotSharp`) is an L1 test and needs no invocation of its own. CI also runs
@@ -131,9 +133,25 @@ comparison rather than an argument.
    that pair of lines again, read them as "the Godot process died before it could accept a
    connection" and go and find out why it died.
 
-**In-editor L2 is not wired up yet.** Running GdUnit4 from inside the editor needs its Godot
-addon installed in `tests/Dlo.Game.Tests/`, which is a click nobody has made. Nothing depends
-on it — CI uses the CLI — but E14-05 is not closed until it is done.
+### Running L2 from the editor
+
+The GdUnit4 adapter is a normal VSTest adapter, so **the tests appear in the test explorer of
+VS Code, Visual Studio and Rider** with discovery, run and debug — including breakpoints
+inside a test running in a live Godot process, which is the reason to use it over the CLI.
+Confirmed working 2026-08-24.
+
+Two things it still needs, both of which are easy to forget because the CLI path sets them up
+for you:
+
+- **`GODOT_BIN` must be visible to the IDE**, not just to your shell. An IDE launched before
+  you exported the variable will not see it; set it machine-wide, or restart the IDE from a
+  shell that has it.
+- **`.runsettings` is picked up automatically** via `Directory.Build.props`, so the headless
+  flag applies here too and no window appears. That is deliberate — see gotcha 4 above.
+
+*(GdUnit4 also ships a panel that runs inside the **Godot** editor, which needs its addon
+installed under `tests/Dlo.Game.Tests/addons/`. That is not installed here and nothing needs
+it; the test explorer covers the same ground without adding a tracked dependency.)*
 
 ---
 
@@ -194,6 +212,11 @@ Line endings are LF in the repository *and* in the working tree on every platfor
 `* text=auto eol=lf`. `core.autocrlf` is per-machine and this project cannot depend on four
 people configuring it identically — and `dotnet format --verify-no-changes` fails against a
 CRLF working tree, so without this a fresh Windows clone fails a check CI reports green.
+
+That last claim stopped being an argument on 2026-08-24: the format gate now passes on
+ubuntu-latest against a tree authored on Windows, which is the first actual cross-platform
+evidence that the normalisation holds. It is re-checked on every push, which is the only place
+a line-endings promise can survive.
 
 ### What a clone that skipped `git lfs pull` looks like
 

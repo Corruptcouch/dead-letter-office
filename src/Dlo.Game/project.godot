@@ -14,6 +14,14 @@ config/name="Dlo.Game"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
+[autoload]
+
+; One of the four permitted autoloads, and that list is closed (arch §6.2): SessionRoot,
+; AudioDirector, SettingsService, SaveService. Each one added is global mutable state that
+; makes the suite harder to write and startup order more fragile, so a fifth is an
+; architecture change rather than a PR.
+SessionRoot="*res://Net/SessionRoot.cs"
+
 [dotnet]
 
 project/assembly_name="Dlo.Game"
