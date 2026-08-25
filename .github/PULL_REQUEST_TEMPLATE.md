@@ -18,7 +18,7 @@ ever catch:
 - [ ] **One construction site for domain systems** (arch §3.2):
 
   ```
-  grep -rn "new ShiftDirector\|new ShiftLedger" src/
+  grep -rn "new ShiftDirector\|new ShiftLedger\|new ParcelRegistry" src/
   ```
 
   Expect **exactly one line**, in `SessionRoot._Ready`, behind one `Multiplayer.IsServer()`

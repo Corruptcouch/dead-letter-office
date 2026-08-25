@@ -1,28 +1,46 @@
+using Dlo.Domain;
+
 using Godot;
 
 namespace Dlo.Game.Carry;
 
 /// <summary>
-/// Something a player can pick up: a mass, a shape, and one grip point per carrier it needs.
+/// The body of a parcel: a mass, a shape, and one grip point per carrier it needs. A view of a
+/// <see cref="ParcelRecord"/> and never the owner of one (arch §5.1).
 /// </summary>
 /// <remarks>
-/// <b>A placeholder for E2's parcel, and deliberately not called one.</b> E1-08 needs an object
-/// the domain marks as over one-person capacity. E2-01 has since defined <c>ParcelRecord</c>,
-/// which owns both facts below; they stay here until E2-04 gives a node the id to look one up by.
+/// Everything below is either derived from <see cref="Size"/> or arrived in
+/// <see cref="ParcelSpawnArgs"/>, so a recycled or respawned node can hold nothing that outlives
+/// it — which is what E2-02 and E2-06 depend on. Policy state is deliberately absent: a lock is
+/// the host's to know (arch §5.3).
 /// </remarks>
-// ponytail: capacity and the policy lock are [Export] fields on the body.
-// Ceiling: E2-01 put both on ParcelRecord, so they are now authored in two places and the grab
-// reads the node's copy - nothing can query "every two-person load in the shift", and the lock
-// still has no source, because E3-05's PolicyState does not exist.
-// Upgrade: E2-04 gives the node its ParcelId at spawn and these become a registry lookup; E2-02
-// is the test that the record outlives the node. E3-05 gives Locked a reason to change mid-shift.
 public partial class Carryable : RigidBody3D
 {
     /// <summary>
+    /// Which parcel this node is showing. <c>default</c> means it is not a parcel at all — a
+    /// prop, or a test fixture — and the host treats it as unlocked and one-person.
+    /// </summary>
+    public ParcelId Id { get; set; }
+
+    /// <summary>Which authored kind of parcel this is (arch §4.1). From spawn args.</summary>
+    public byte Archetype { get; set; }
+
+    /// <summary>How big it is. From spawn args, and what decides
+    /// <see cref="CarriersRequired"/>.</summary>
+    public byte Size { get; set; }
+
+    /// <summary>How battered it looks. From spawn args, so every peer sees the same dents.</summary>
+    public byte Condition { get; set; }
+
+    /// <summary>
     /// How many carriers this load needs at once. Two means one player cannot lift it (E1-08).
     /// </summary>
-    [Export]
-    public int CarriersRequired { get; set; } = 1;
+    /// <remarks>
+    /// Derived from <see cref="Size"/> through <see cref="ParcelRecord.CarriersRequiredFor"/>,
+    /// which is the host's own rule — so this is a view of a domain fact rather than a second
+    /// copy of one, and a client reaches the same answer with nothing extra on the wire.
+    /// </remarks>
+    public int CarriersRequired => ParcelRecord.CarriersRequiredFor(Size);
 
     /// <summary>
     /// Half the distance between carrier slots, along the body's local X. Only meaningful when
@@ -30,17 +48,6 @@ public partial class Carryable : RigidBody3D
     /// </summary>
     [Export]
     public float GripHalfWidth { get; set; } = 0.5f;
-
-    /// <summary>
-    /// Whether policy currently forbids picking this up. Validated by the host on every grab.
-    /// </summary>
-    /// <remarks>
-    /// Nothing sets this yet — E3-05's <c>PolicyState</c> is what will. It exists now because
-    /// E1-04 requires the host to validate a policy lock, and a validation path with no input is
-    /// still a validation path; adding the check later means auditing every grab call site again.
-    /// </remarks>
-    [Export]
-    public bool Locked { get; set; }
 
     /// <summary>
     /// The node a client may move to fake holding this (arch §3.3). Meshes hang under it.

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 namespace Dlo.Domain;
@@ -9,7 +8,8 @@ namespace Dlo.Domain;
 /// </summary>
 /// <remarks>
 /// Host-owned, like every domain system, and it never forgets — a parcel destroyed in the first
-/// minute still has to be nameable when the report is built at the whistle (vision §7).
+/// minute still has to be nameable when the report is built at the whistle (vision §7). A node
+/// being freed, pooled or respawned does not reach this class at all, which is the whole point.
 /// </remarks>
 public sealed class ParcelRegistry
 {
@@ -19,23 +19,20 @@ public sealed class ParcelRegistry
     // parcel happened to be registered first. Do not "tidy" this to zero.
     private uint _nextId = 1;
 
+    /// <summary>How many parcels have been registered this shift.</summary>
+    public int Count => _records.Count;
+
     /// <summary>
     /// Assigns the next id and records a parcel under it.
     /// </summary>
-    /// <param name="carriersRequired">
-    /// How many carriers the load needs at once (arch §3.3). At least one.
-    /// </param>
-    /// <param name="isLocked">Whether policy currently forbids picking it up.</param>
+    /// <param name="archetype">Which authored kind of parcel this is.</param>
+    /// <param name="size">How big it is, which is also what decides its carrier count.</param>
+    /// <param name="condition">Visible wear.</param>
+    /// <param name="isLocked">Whether policy forbids picking it up. Host-only.</param>
     /// <returns>The stored record, carrying the id it was just given.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="carriersRequired"/> is below one. A parcel nobody has to carry is a
-    /// caller bug that would otherwise surface as a load behaving like scenery.
-    /// </exception>
-    public ParcelRecord Register(int carriersRequired, bool isLocked)
+    public ParcelRecord Register(byte archetype, byte size, byte condition, bool isLocked = false)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(carriersRequired, 1);
-
-        var record = new ParcelRecord(new ParcelId(_nextId++), carriersRequired, isLocked);
+        var record = new ParcelRecord(new ParcelId(_nextId++), archetype, size, condition, isLocked);
         _records[record.Id] = record;
         return record;
     }

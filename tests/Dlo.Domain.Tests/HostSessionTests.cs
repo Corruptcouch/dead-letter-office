@@ -31,7 +31,7 @@ public class HostSessionTests
     {
         director = new ShiftDirector();
         ledger = new ShiftLedger();
-        return new HostSession(director, ledger, new StubRandom());
+        return new HostSession(director, ledger, new StubRandom(), new ParcelRegistry());
     }
 
     [Fact]
@@ -93,7 +93,10 @@ public class HostSessionTests
         // Nullable is enabled, so this is a claim about callers who ignore it - the Game layer
         // compiles with warnings, not errors, so the guard is real (standards §1, §9).
         Assert.Throws<ArgumentNullException>(
-            () => new HostSession(null!, new ShiftLedger(), new StubRandom()));
+            () => new HostSession(null!, new ShiftLedger(), new StubRandom(), new ParcelRegistry()));
+
+        Assert.Throws<ArgumentNullException>(
+            () => new HostSession(new ShiftDirector(), new ShiftLedger(), new StubRandom(), null!));
     }
 
     [Fact]

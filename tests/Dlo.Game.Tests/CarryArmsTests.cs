@@ -1,3 +1,5 @@
+using Dlo.Domain;
+
 using Dlo.Game.Carry;
 
 using GdUnit4;
@@ -124,7 +126,9 @@ public class CarryArmsTests
 
         try
         {
-            load.CarriersRequired = 2;
+            // Capacity is derived from size now (E2-04), so a two-person load is authored by
+            // being big rather than by setting a count on the node.
+            load.Size = ParcelRecord.TwoPersonSize;
 
             arms.Reach(load, 0);
             var first = arms.LeftTarget;

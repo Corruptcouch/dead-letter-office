@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 
+using Dlo.Domain;
+
 using Godot;
 
 namespace Dlo.Game.Carry;
@@ -20,10 +22,13 @@ namespace Dlo.Game.Carry;
 /// </para>
 /// </remarks>
 // ponytail: loads are addressed over the wire by scene path.
-// Ceiling: a path is not an identity - it breaks the moment a load is reparented or pooled, and it
-// costs more bytes than the uint it will become. Pooling is E2-06 and would break this.
-// Upgrade: ParcelId exists as of E2-01 and is the intended key; E2-04 is where a node is given
-// one, at spawn. This is a Dictionary key change plus the RPC signatures.
+// Ceiling: reached, not approaching. E2-06 landed the pool, and a recycled body is renamed and
+// reparented, so a path names a different parcel afterwards - or nothing. Nothing in gameplay
+// pools a parcel yet, which is the only reason this is still standing.
+// Upgrade: ParcelId is the key, and every node now carries one from E2-04's spawn args. It is a
+// Dictionary key change, the RPC signatures, and an id-to-node lookup on each peer, in the shape
+// RegisterCarrier already uses. E4-01 is the first story that pools a parcel into a live shift,
+// and it must not land before this does.
 public partial class GrabDirector : Node
 {
     /// <summary>The node name this is registered under, on every peer.</summary>
@@ -41,6 +46,16 @@ public partial class GrabDirector : Node
 
     /// <summary>Who holds what, on every peer. The host is the only writer.</summary>
     public IReadOnlyDictionary<string, List<long>> Holders => _holders;
+
+    /// <summary>
+    /// The host's parcel registry, or <c>null</c> on a client and outside a session.
+    /// </summary>
+    /// <remarks>
+    /// Passed in rather than built, like every other domain system (arch §3.2) —
+    /// <c>SessionRoot</c> hands it over once the host session exists. Where it is null the host
+    /// falls back to the node, which is right for the things that are not parcels.
+    /// </remarks>
+    public ParcelRegistry? Parcels { get; set; }
 
     /// <summary>
     /// Tells this director where a peer's carrier body is.
@@ -228,11 +243,17 @@ public partial class GrabDirector : Node
             ? carrier.GlobalPosition.DistanceTo(load.GlobalGrip(slot))
             : float.MaxValue;
 
+        // Domain first, the node only as the fallback for something that is not a registered
+        // parcel at all — a prop or a test fixture, which has no policy rather than an unread
+        // one. Both readings agree for a real parcel: the record and the node derive capacity
+        // from the same size byte (arch §5.1).
+        var parcel = Parcels?.Find(load.Id);
+
         var verdict = GrabRules.Evaluate(
             distance,
             held.Count,
-            load.CarriersRequired,
-            load.Locked,
+            parcel?.CarriersRequired ?? load.CarriersRequired,
+            parcel?.IsLocked ?? false,
             alreadyHolding: held.Exists(h => h.Peer == peer));
 
         if (verdict != GrabVerdict.Granted)

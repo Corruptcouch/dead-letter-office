@@ -514,7 +514,7 @@ Before opening a PR:
 - [ ] Nothing new compares `TouchedAtShiftTime`; nothing returns `Unattributed` as a fallback.
 - [ ] Nothing caches a routing answer across a `PolicyState` change.
 - [ ] Domain-system construction still happens in exactly one place, behind one
-      `Multiplayer.IsServer()` branch — `grep -rn "new ShiftDirector\|new ShiftLedger" src/`.
+      `Multiplayer.IsServer()` branch — `grep -rn "new ShiftDirector\|new ShiftLedger\|new ParcelRegistry" src/`.
 - [ ] No new autoload.
 - [ ] New content type ships with its `ContentTool` validation rule, and nothing that should be
       data was authored in code.

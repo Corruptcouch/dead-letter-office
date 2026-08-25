@@ -1,6 +1,8 @@
 using System.Linq;
 using System.Threading.Tasks;
 
+using Dlo.Domain;
+
 using Dlo.Game.Carry;
 
 using GdUnit4;
@@ -109,14 +111,16 @@ public class GrabDirectorTests
     [TestCase]
     public async Task A_policy_locked_load_is_refused_and_creates_no_joint()
     {
-        var rig = Rig();
+        // Locked on the record, not on the node: the lock is a policy fact the host owns and
+        // never publishes (arch §5.3), so a rig that set it on the body would be asserting
+        // against a field that no longer exists anywhere real.
+        var rig = Rig(locked: true);
 
         try
         {
             GrabVerdict? refused = null;
             rig.Director.Denied += (_, verdict) => refused = verdict;
 
-            rig.Load.Locked = true;
             rig.Director.Grab(rig.Load);
             await rig.Frame();
 
@@ -365,7 +369,8 @@ public class GrabDirectorTests
         throw new System.InvalidOperationException("No joint was created.");
     }
 
-    private static GrabRig Rig(int carriers = 1, float mass = Mass, bool restingOnFloor = false)
+    private static GrabRig Rig(
+        int carriers = 1, float mass = Mass, bool restingOnFloor = false, bool locked = false)
     {
         var tree = (SceneTree)Engine.GetMainLoop();
         var root = new Node3D { Name = "GrabRig" };
@@ -386,11 +391,22 @@ public class GrabDirectorTests
         director.RegisterCarrier(Host, carrier);
         director.RegisterCarrier(Other, second);
 
+        // The host resolves capacity and the lock out of the registry (E2-01), so the rig is
+        // shaped like a real host session: a record that owns both, and a node that views it.
+        var parcels = new ParcelRegistry();
+        var record = parcels.Register(
+            archetype: 0,
+            size: carriers >= 2 ? ParcelRecord.TwoPersonSize : (byte)1,
+            condition: 0,
+            isLocked: locked);
+        director.Parcels = parcels;
+
         var load = new Carryable
         {
             Name = "Load",
             Mass = mass,
-            CarriersRequired = carriers,
+            Id = record.Id,
+            Size = record.Size,
             Position = new Vector3(0, restingOnFloor ? 0.41f : 1.2f, 0),
         };
         load.AddChild(new CollisionShape3D

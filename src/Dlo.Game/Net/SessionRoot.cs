@@ -90,6 +90,11 @@ public partial class SessionRoot : Node
         // Godot substitutes an OfflineMultiplayerPeer rather than accepting null here, so
         // "no session" is that type and not the absence of one - see IsInSession.
         Multiplayer.MultiplayerPeer = null;
+
+        // The registry goes with the session it belonged to; a stale one would answer the next
+        // shift's grabs with the last shift's parcels.
+        _grabs?.Parcels = null;
+
         _hostSession = null;
     }
 
@@ -126,8 +131,13 @@ public partial class SessionRoot : Node
             // the injected IRandom buys nothing - a seed nobody can read is not reproducible.
             GD.Print($"Session seed: {random.Seed}");
 
-            _hostSession = new HostSession(new ShiftDirector(), new ShiftLedger(), random);
+            _hostSession = new HostSession(
+                new ShiftDirector(), new ShiftLedger(), random, new ParcelRegistry());
             _hostSession.PeerJoined(new PeerId(Multiplayer.GetUniqueId()));
+
+            // The grab authority resolves capacity and the policy lock out of the registry, so
+            // it has to be handed the host's one (arch §3.2 — passed in, never built there).
+            Grabs.Parcels = _hostSession.Parcels;
         }
     }
 

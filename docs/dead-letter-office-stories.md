@@ -30,23 +30,20 @@ marked as such instead of being rounded up.
 | **E14** Foundation | **8 done**, 1 partial | Complete bar E14-07's deliberate-failure run |
 | **E0** Netcode spine | **8 done**, 2 blocked | Spine is in and L3-proven. Steam is the only hole |
 | **E1** Embodiment | **9 done**, 1 blocked | Feature work complete. **Only Gate 0 itself is left** |
-| **E2 · E3 · E4** Tier 1 | **1 partial** of 30 | E2-01's Domain types are in. E2-02 and E2-04 owe the node-is-a-view wiring |
+| **E2 · E3 · E4** Tier 1 | **4 done** of 30 | E2's spine is in: identity, spawn args, pooling. The rest of E2 waits on **E13-02** and **E4-01**, in other epics |
 | **Alongside** E12·13·15·17·18·19 | 0 of 29 | Not started. **E15-04 and E19-01/02 now block Gate 0** |
 
-**25 of 88 decomposed stories are done, and one more is part-way.** Suite: **L1 16 · L2 78 ·
-L3 41**, all green, `dotnet format` clean. (L2 was recorded as 77 here and measures 78; the
+**29 of 88 decomposed stories are done.** Suite: **L1 25 · L2 91 · L3 41**, all green,
+`dotnet format` clean. (L2 was recorded as 77 here and measured 78 before E2 added to it; the
 suite was never short, the tally was.)
 
-The four that fall short, all named rather than rounded up:
+The three that fall short, all named rather than rounded up:
 
 - **E1-10 — Gate 0.** Every E1 story under it is done, but the gate is a playtest: it needs a
   person who has not seen the game, plus **E15-04** and **E19-01 → E19-02**. It is now the single
   thing standing between this project and its first real verdict.
 - **E14-07** — CI runs everything it should and is green, but nobody has watched it go **red**.
   A pipeline never seen to fail is not known to work as a gate.
-- **E2-01** — the three Domain types are in and L1-proven, but `Carryable` still authors capacity
-  and the policy lock as `[Export]` fields, so those two facts now live in two places. **E2-04**
-  closes it by giving a node its `ParcelId` at spawn, and nothing else waits on it.
 - **E0-01 / E0-03** — the Steam path. Blocked on Steam accounts on separate machines, not on any
   decision. The seam around it is finished, so nothing else waits on it.
 
@@ -616,18 +613,19 @@ Deciding either before the session would be deciding it without the only evidenc
 *A data carrier with a physical body, whose identity outlives both.*
 
 #### E2-01 · `ParcelId`, `ParcelRecord`, `ParcelRegistry`
-**Depends:** E14-04 · **Test:** L1 · **Status:** 🔶 **Partial**
+**Depends:** E14-04 · **Test:** L1 · **Status:** ✅ **Done**
 
 - [x] `ParcelId` is a host-assigned `readonly record struct` over a `uint` (Arch §5.1). Ids count
       from one, so a `default` `ParcelId` names no parcel instead of the first one registered —
       proved by breaking it, which reddens exactly one test and no others.
 - [x] `ParcelRegistry` maps id → record and is **the only owner of parcel state**. It assigns every
-      id, and it never forgets one, because the report is built at the whistle (Vision §7).
-- [ ] **No gameplay state on any node** — a node is a view of a record (Standards §12). E2-02 is the
-      test that proves it. **Owed:** `ParcelRecord` now holds `CarriersRequired` and `IsLocked`, but
-      `Carryable` still carries both as `[Export]` fields, so they are authored in two places until
-      **E2-04** gives a node the `ParcelId` to look one up by. Both `ponytail:` comments say so, and
-      this is the only reason the story is not Done.
+      id, and it never forgets one, because the report is built at the whistle (Vision §7). It is
+      constructed at the one site (Arch §3.2) and the review-checklist grep now names it.
+- [x] **No gameplay state on any node** — a node is a view of a record (Standards §12). Closed by
+      E2-04: capacity is **derived** from the size byte through `ParcelRecord.CarriersRequiredFor`,
+      so host and client compute it rather than storing it, and the policy lock left the node
+      entirely — it is host-only on the record, and `GrabDirector` reads it from the registry.
+      E2-06's recycle test is what proves a node keeps nothing.
 - [x] XML docs on every public Domain member, with `<see cref="..."/>` that resolves so the Game
       layer gets working hover text. Verified by the compiler rather than by eye: Domain builds
       clean under `-p:GenerateDocumentationFile=true`, where a missing doc is CS1591 and an
@@ -637,12 +635,17 @@ Deciding either before the session would be deciding it without the only evidenc
       which stood in as `Vec3` until this story.
 
 #### E2-02 · Identity survives the node being freed
-**Depends:** E2-01, E0-05 · **Test:** L2
+**Depends:** E2-01, E0-05 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] Freeing a parcel's node leaves the record intact and addressable by `ParcelId`.
-- [ ] Re-spawning from that id restores manifest, tamper state and culpability.
-- [ ] The test **proves the node was actually freed**, not merely hidden — otherwise it passes for
-      the wrong reason forever, and it is the load-bearing test for tube transit and pooling both.
+- [x] Freeing a parcel's node leaves the record intact and addressable by `ParcelId`.
+- [x] Re-spawning from that id restores manifest, tamper state and culpability. **What exists is
+      restored** — id, archetype, size, condition and derived capacity, all rebuilt out of the
+      registry by a node that never met the old one. The three the criterion names do not exist on
+      `ParcelRecord` yet (E2-03, E2-07, and Arch §4.6's `ActorRef`), so the mechanism is what is
+      proved; the test carries a `ponytail:` saying each story must add its field to that assertion.
+- [x] The test **proves the node was actually freed**, not merely hidden — `IsInstanceValid` is
+      false before anything else is asserted, so a hidden-but-alive node fails here rather than
+      passing for the wrong reason forever.
 
 #### E2-03 · The manifest model
 **Depends:** E2-01, E13-02 · **Test:** L1
@@ -656,13 +659,19 @@ Manifest, address, destination code, weight, fragility, declared contents.
 - [ ] Variation is data. Adding an archetype does not add a class (Arch §4.1).
 
 #### E2-04 · Spawn args and the custom spawn function
-**Depends:** E2-01, E0-05 · **Test:** L2 + L3 negative
+**Depends:** E2-01, E0-05 · **Test:** L2 + L3 negative · **Status:** ✅ **Done**
 
-- [ ] `ParcelSpawnArgs(uint Id, byte Archetype, byte Size, byte Condition)` — Arch §5.2's shape.
-- [ ] **The manifest is not in the payload**, and a negative test inspects the serialised bytes to
-      prove it. This is not an optimisation; it is E3-06's enforcement beginning at spawn time.
-- [ ] A client builds a box that looks right — correct size, archetype, visible condition — from
-      spawn args alone.
+- [x] `ParcelSpawnArgs(uint Id, byte Archetype, byte Size, byte Condition)` — Arch §5.2's shape,
+      in Domain, and an L1 test asserts those four members and no others so E2-03 cannot quietly
+      add a fifth.
+- [x] **The manifest is not in the payload**, and a negative test inspects the serialised bytes to
+      prove it. There is no manifest yet, so the assertion available today is the stronger one it
+      will become: two records differing **only** in their policy lock serialise to byte-identical
+      payloads, and the round-tripped payload is four numbers.
+- [x] A client builds a box that looks right — correct size, archetype, visible condition — from
+      spawn args alone. Asserted through `VarToBytes`/`BytesToVar`, so the builder cannot cheat by
+      reading a record the wire never carried. Capacity comes for free: both sides derive it from
+      the size byte, so nothing extra travels.
 
 #### E2-05 · Three replication classes, with promotion and demotion
 **Depends:** E2-04, E0-06, E4-01 · **Test:** L2 + L3
@@ -677,14 +686,17 @@ Manifest, address, destination code, weight, fragility, declared contents.
       so it earns an assertion rather than a code review.
 
 #### E2-06 · Object pooling
-**Depends:** E2-02 · **Test:** L2
+**Depends:** E2-02 · **Test:** L2 · **Status:** ✅ **Done**
 
-- [ ] Parcels are pooled, never `QueueFree`d (Standards §10). They are the highest-churn object in
-      the game and the belt never stops.
-- [ ] A recycled node carries **nothing** over — proved by mutating every mutable field before
-      release and asserting defaults after acquire, not by reading the code and being satisfied.
-- [ ] Pool growth is bounded and logged, so "the belt never stops" cannot quietly become "the pool
-      never stops."
+- [x] Parcels are pooled, never `QueueFree`d (Standards §10). A released body stays valid, parked
+      and invisible, and is taken back under the pool if it was released from the world.
+- [x] A recycled node carries **nothing** over — proved by mutating every mutable field before
+      release and asserting defaults after acquire. Proved a second time by breaking `Clear`, which
+      reddens the test rather than leaving it green.
+- [x] Pool growth is bounded and logged. `MaxParcels` is a hard cap that throws rather than growing
+      quietly, and every growth prints the new total. **The cap is asserted; the print is not** —
+      and the cap carries a `ponytail:` because **E4-01's accumulating belt** is the first thing
+      that can reach it, and that story has to choose between raising it and giving the belt an end.
 
 #### E2-07 · Openable parcels and tamper state *(post-MVP)*
 **Depends:** E2-03 · **Test:** L1 + L2
@@ -1241,12 +1253,14 @@ Read off the dependency graph, not off preference. Everything here has its depen
 
 **Unblocked and off that path**, worth picking up alongside:
 
-- **E2-02 and E2-04** — E2-01 landed the Domain types, so the gate on all of E2, most of E3 and
-  E13-01 is now the wiring rather than the design. E2-04 is the one that pays: a node given its
-  `ParcelId` at spawn retires both `ponytail:` comments written against E2-01 — `GrabDirector`
-  addressing loads by scene path, and `Carryable` holding capacity and the policy lock as
-  `[Export]` fields. E2-02 is the test that the record outlives the node, and both need E0-05,
-  which is done.
+- **E13-02** The manifest and address grammar — now the single thing standing between E2 and
+  being finished. **E2-03** is the only unbuilt story in E2 that no other epic blocks, and it waits
+  on this grammar; E13-02 in turn needs only E13-01. Two small content stories unlock the parcel's
+  whole data half.
+- **E4-01** Conveyors and rails — blocks **E2-05**, and through it E2-09 and E2-10. It is also the
+  first story that pools a parcel into a live shift, which is what makes `GrabDirector`'s
+  scene-path addressing a real bug rather than a latent one; that `ponytail:` names E4-01 as the
+  line it must not cross.
 - **E2-05** Replication classes — E1-06 ran into exactly what it exists for: a client that both
   simulates and receives a body fights itself. The L3 harness freezes parcels on non-authority
   peers to work around it, and that workaround is a note in this document rather than a design.

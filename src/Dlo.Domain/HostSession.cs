@@ -26,15 +26,22 @@ public sealed class HostSession
     /// Injected so a bug report can carry a seed (arch §4.2). Held rather than used for now —
     /// the first system that samples anything takes it from here.
     /// </param>
-    public HostSession(ShiftDirector director, ShiftLedger ledger, IRandom random)
+    /// <param name="parcels">The only owner of parcel state (arch §5.1).</param>
+    public HostSession(
+        ShiftDirector director,
+        ShiftLedger ledger,
+        IRandom random,
+        ParcelRegistry parcels)
     {
         ArgumentNullException.ThrowIfNull(director);
         ArgumentNullException.ThrowIfNull(ledger);
         ArgumentNullException.ThrowIfNull(random);
+        ArgumentNullException.ThrowIfNull(parcels);
 
         Director = director;
         Ledger = ledger;
         Random = random;
+        Parcels = parcels;
     }
 
     /// <summary>The shift clock this session runs on.</summary>
@@ -45,6 +52,9 @@ public sealed class HostSession
 
     /// <summary>The session's randomness source.</summary>
     public IRandom Random { get; }
+
+    /// <summary>Every parcel this shift has issued (arch §5.1).</summary>
+    public ParcelRegistry Parcels { get; }
 
     /// <summary>Every peer currently connected, the host included.</summary>
     public IReadOnlyCollection<PeerId> ConnectedPeers => _connectedPeers;
