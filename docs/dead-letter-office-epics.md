@@ -243,6 +243,23 @@ client genuinely does not hold a manifest it has not scanned (Arch §5.3).
 **Decisions already made:**
 - **No player can complete a parcel alone** (vision §8). This is enforced by *replication*,
   not by UI gating — the host does not send what a post has not earned (Arch §5.3).
+- **A post is an authored volume; the verbs inside it are stations** (Arch §5.3.1, ruled
+  2026-08-25). Volumes do not overlap and there is unowned floor between them, so a body has
+  exactly one containing post *by construction* — which is how "you cannot work two posts at
+  once" is enforced. **No post-occupancy state is stored anywhere:** occupancy is a
+  point-in-volume query, never a field, so there is no lock and therefore no unlock path. Using
+  a station is a `Request*` intent the host admits only if the actor's body is inside that
+  station's volume — one check, at the intent.
+- **The manifest decays on exit**, on the frame the body leaves the volume, with no debounce.
+  `holds(peer, parcel) = scanned(peer, parcel) AND occupying(peer, scanDesk)`. This makes
+  vision §8's *no player can complete a parcel alone* literally true and **independent of E5's
+  clock**, which matters because Gate 2 is played before E5 exists: without it, a lone player
+  can hoard manifests and route them slowly, and Gate 2 would report dilution caused by a
+  missing quota rather than by the design. The known ceiling is recorded as a `ponytail:` in
+  Arch §5.3.1.
+- **Only the manifest is filtered per-peer.** The other three rows of Arch §5.3 replicate to
+  everybody — the chart's asymmetry is *optical* (it hangs on the far wall), and jam and stamp
+  state are physically visible by requirement. Three of four rows cost zero filtering code.
 - `RoutingRules.Evaluate` is a pure function of parcel, chute and policy. No engine, no clock.
 - `PolicyState` is mutable and replicated, and the PA system can change it mid-shift
   (Arch §4.5). The chart going stale is the antagonist landing a hit.

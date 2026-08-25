@@ -30,7 +30,7 @@ marked as such instead of being rounded up.
 | **E14** Foundation | **8 done**, 1 partial | Complete bar E14-07's deliberate-failure run |
 | **E0** Netcode spine | **8 done**, 2 blocked | Spine is in and L3-proven. Steam is the only hole |
 | **E1** Embodiment | **9 done**, 1 blocked | Feature work complete. **Only Gate 0 itself is left** |
-| **E2 · E3 · E4** Tier 1 | **10 done** of 30 | **E2 is done to its limit** — only its two post-MVP stories and E2-09 (waiting on E4-03) are left. E3 has its routing function. **E4-03 is the unblocked one today** |
+| **E2 · E3 · E4** Tier 1 | **10 done** of 30 | **E2 is done to its limit** — only its two post-MVP stories and E2-09 (waiting on E4-03) are left. **E3 is unblocked as of the gap 4 ruling**, but reaches its stories through E4: **E4-02 and E4-03 are the unblocked ones today** |
 | **Alongside** E12·13·15·17·18·19 | **3 done**, 2 partial of 29 | E13's spine is in and validated in CI. **E15-04 and E19-01/02 still block Gate 0** |
 
 **38 of 88 decomposed stories are done.** Suite: **L1 79 · L2 111 · L3 56**, all green,
@@ -790,12 +790,21 @@ whatever belt it was last on — E2-06's own criterion, and it had grown a field
 #### E3-01 · The post model
 **Depends:** E2-01, E4-05 · **Test:** L1 + L2
 
+Unblocked 2026-08-25 by the gap 4 ruling (arch §5.3.1). **Its second box changed** — see below.
+
 - [ ] A post is an authored volume plus **the information class it grants** — not four hard-coded
       classes (Arch §4.1, E13).
-- [ ] The host knows which post each player currently occupies, and that fact is what drives E3-06.
-- [ ] Working two posts at once is impossible by geometry, and E4-05 owns proving it.
-
-*Read the gap on what a post physically is before starting this one.*
+- [ ] **The verbs are stations inside the volume.** Using one is a `Request*` intent, and the host
+      admits it only if the actor's body is inside that station's post volume — **one check, at the
+      intent, not per frame.**
+- [ ] **Nothing stores which post a player occupies.** Occupancy is a point-in-volume query, and
+      the check that keeps it that way is E3-04's idiom: reflect over the post type and assert a
+      `CurrentPost` field has **nowhere to live**. *This box replaces "the host knows which post
+      each player currently occupies, and that fact is what drives E3-06" — what drives E3-06 is
+      the scanned-facts predicate, and occupancy only decides whether an intent is admissible.*
+- [ ] Working two posts at once is impossible by geometry, and E4-05 owns proving it. Volumes do
+      **not** overlap and there is unowned floor between them, so this needs no lock, no lockout
+      rule and — decisively — no unlock path.
 
 #### E3-02 · The scanner
 **Depends:** E3-01, E2-03 · **Test:** L2 + L3
@@ -868,10 +877,15 @@ The mechanism that makes voice load-bearing. It is a **network** property, never
 lie is one a client can trivially see through, and it means every client already holds every
 manifest (Arch §5.3).
 
-- [ ] The host does not send a manifest to a client that has not earned it.
-- [ ] The filter is applied at the point of **sending**, not at the point of rendering.
+- [ ] The host does not send a manifest to a client that has not earned it. The predicate is
+      `holds(peer, parcel) = scanned(peer, parcel) AND occupying(peer, scanDesk)` — **the manifest
+      decays on exit**, on the frame the body leaves, no debounce (arch §5.3.1 carries the ceiling).
+- [ ] The filter is applied at the point of **sending**, not at the point of rendering, and it is
+      driven by the volume's enter/exit rather than sampled per frame.
 - [ ] Each of Arch §5.3's four rows is expressed as data, so a fifth post is content rather than a
-      code change.
+      code change. **Only the scan-desk row has a per-peer filtering consequence** — the other
+      three replicate to everybody, and a per-peer visibility path for jam or stamp state is
+      something §5.3 does not ask for.
 
 #### E3-07 · L3 manifest anti-assertion
 **Depends:** E3-06, E0-09 · **Test:** L3
@@ -1185,8 +1199,9 @@ MVP line actually consumes; the mutation, PA-line and hazard schemas arrive with
 #### E15-01 · Scanner screen
 **Depends:** E3-02 · **Test:** L2
 
-- [ ] The scan result is read from a **diegetic surface**; a clipboard or a screen beats a HUD panel
-      where the fiction allows it (epics E15).
+- [ ] The scan result is read from a **fixed diegetic screen at the desk** — decided by the gap 4
+      ruling rather than left open here: with the manifest decaying on exit, a clipboard that
+      blanks as you carry it is nonsense, and a monitor you walked away from needs no explanation.
 - [ ] It displays only what this client has actually received. It cannot display a manifest the
       network never sent — which is E3-06 doing its job, visible from the outside.
 
@@ -1394,10 +1409,15 @@ Read off the dependency graph, not off preference. Everything here has its depen
   templates first**; the machine has 4.6 templates and this story fails until that is fixed. It is
   also the one unverified leg of the `net10.0` override (arch §1.4).
 
-**E3 is now waiting on a ruling, not on code.** E3-04 is done and nothing else in the epic is
-unblocked: E3-01 and E3-06 both hang off **gap 4 — what a post physically is** — and E3-02, E3-03
-and E3-05 hang off E3-01 in turn. E3-08 additionally wants **gap 2** settled. Those two answers
-are the cheapest thing anyone can do for this epic right now.
+**E3 is no longer waiting on a ruling — gap 4 is settled** (2026-08-25, arch §5.3.1), which
+unblocks E3-01 and with it E3-02, E3-03, E3-05 and E3-06. **E3-08 still wants gap 2**, and that is
+now the only ruling this epic is short of.
+
+**But E3 reaches its own stories through E4, and the chain has one open link.** E3-01 depends on
+**E4-05**, which depends on E4-01 ✅, E4-04 ✅ and **E4-02**. So the path is
+**E4-02 → E4-05 → E3-01**, and **E4-02 is unblocked today** — its dependencies, E4-01 and E3-04,
+are both done. It was missing from this list before the ruling because nothing downstream of it
+could start; that is no longer true, and it is now the highest-leverage story in Tier 1.
 
 **Do not start** E0-03 (blocked on E0-01), E3-10 (a held fix, and Gate 2 has not reported), or
 anything in Tier 2 — Gate 1 can still invalidate it, which is rung 1 of `AGENTS.md`.
@@ -1410,14 +1430,14 @@ The epics document asks that a question a story cannot answer from its epic's **
 made** be recorded and answered **once, at the epic level**. Decomposing the MVP line surfaced
 seven, building E13 added two more, and E2-10's measurement added a tenth. Five are genuinely
 open; three are duplications or inconsistencies that need a ruling rather than a decision, and
-two — 1 and 5 — are settled below.
+three — 1, 4 and 5 — are settled below.
 
 | # | Gap | Blocks | Suggested owner |
 | ---: | :-- | :-- | :-- |
 | 1 | **Who owns the player character's transform?** Arch §3.1 says host authority with no prediction of gameplay state; Arch §6.1 says input never waits for the network. For your own body those reconcile only if the character node's authority is the **owning peer** — which is not prediction, and a position is not a fact about the shift. That reading is assumed in E1-02 and needs confirming rather than inferring, because every other network story inherits it | E1-02, and everything downstream | Tech |
 | 2 | **Which policy judges a parcel already in flight?** E3-08 changes `PolicyState` mid-shift. A parcel stamped under the old policy and entering a chute after the change is judged by — the policy at stamp time, or at chute entry? Chute entry is assumed (it is crueller, more on-theme, and the only one that needs no cached answer, which Standards §12 forbids anyway), but it is a design call, not a technical one. **E3-04 shipped without settling it and did not have to**: `Evaluate` takes the policy as an argument and holds no clock, so *which* policy is the caller's to choose and no answer is baked in. It now blocks E3-08 alone | E3-08 | Owner |
 | 3 | **Does a host-lost shift produce a report?** E12-05 ends the shift cleanly on all peers. Vision §7 makes the report the highest-value feature and §3.5 makes blame the comedy engine — a rage-quitting host who deletes everyone's report is a real outcome to have an opinion about | E12-05, E8 later | Owner |
-| 4 | **What is a post, physically?** A volume you stand in, or a station you interact with? E3-01 and E3-06 both hang off the answer, and so does whether "you cannot work two at once" is enforced by geometry or by state | E3-01, E3-06, E4-05 | Owner + Tech |
+| 4 | **What is a post, physically?** A volume you stand in, or a station you interact with? E3-01 and E3-06 both hang off the answer, and so does whether "you cannot work two at once" is enforced by geometry or by state. **Settled 2026-08-25 — a volume, and the binary was false**; see below and arch §5.3.1 | E3-01, E3-06, E4-05 | Owner + Tech |
 | 5 | **Host-loss teardown is listed in two epics.** It is a story in E0 *and* in E12. Split here as E0-10 (session ends cleanly, asserted at L3) and E12-05 (the player-facing message and return to lobby). Confirm or merge | E0-10, E12-05 | Tech |
 | 6 | **Scanner and chart appear in both E3 and E15.** Split here as E3 owning the mechanism and E15 owning the surface. E15's header also says Tier 2 while the dependency diagram says it runs from Tier 1 — the diagram is right, since E3 cannot be played without a readable chart | E3-02, E3-05, E15-01, E15-02 | Tech |
 | 7 | **Gate 2 needs Gate 1's kit.** Gate 2 lives in E3 (Tier 1), but it needs four players and a lobby, which is Gate 1's line. Sequence is presumably Gate 1 → Gate 2 in the same window; worth stating, because "Gate 2 lives in E3" reads as though it comes first | E3-09, E19-05 | Owner |
@@ -1425,10 +1445,44 @@ two — 1 and 5 — are settled below.
 | 9 | **The contents table is a content type arch §7 does not list.** E13-01 requires that "declared contents resolve", and nothing to resolve them against existed. Added as `content/contents.csv`, so an archetype naming contents nobody declared is a build failure rather than a box that says nothing. It wants a row in arch §7's table, or a ruling that declared contents should have been free text | E13-01, E2-03, E2-08 | Tech |
 | 10 | **Arch §8's two replication numbers contradict each other, and the measurement says which gives.** E2-10 measured 40 awake bodies at **63–70 KB/s** against a **60 KB/s** budget, with a transform encoding already cheaper than §3.4 assumed — so this is a design choice, not a saving to find. Filed as **epics open item 11**; recorded here because E5 sets mail volume against it and E6 adds to it | E5, E6, E4-10 | Owner + Tech |
 
-**Gap 4 is now the most expensive one open.** It was filed as blocking E3-01, E3-06 and E4-05;
-with E3-04 done it blocks **the entire rest of E3**, because E3-02, E3-03 and E3-05 all depend on
-E3-01 and E3-01 cannot start without it. One answer — a volume you stand in, or a station you
-interact with — unblocks five stories.
+**Gap 4 is settled — a post is an authored volume, and the binary in the question was false.**
+Ruled 2026-08-25 and written up as **arch §5.3.1**, with the E3-level decisions in the epics
+document. It was the most expensive gap open: filed against E3-01, E3-06 and E4-05, it had grown
+to block **the entire rest of E3**, because E3-02, E3-03 and E3-05 all depend on E3-01. Those
+five are unblocked.
+
+*Volume or station* conflated three jobs — granting an information class, answering *which post
+is this player at*, and giving the player something to act on — and only the third is a station.
+So author both: **a post is a volume; the verbs inside it are stations**, and using a station is
+a `Request*` intent the host admits only if the actor's body is inside that station's volume.
+One check, at the intent, not per frame.
+
+**"You cannot work two at once" is geometry, and the sharp form of that is that no
+post-occupancy state is stored anywhere.** Volumes do not overlap and there is unowned floor
+between them, so a body has exactly one containing post by construction — no lock, no lockout
+rule, no error message, and decisively **no unlock path**. A station that binds a player until it
+releases them is the same trap class E4-04's third box exists to prevent, and it would fight arch
+§6.1's *input never waits for the network*. The check that keeps this ruling true is the idiom
+E3-04 already uses on `ParcelRecord`: reflect over the post type and assert a `CurrentPost`
+field has **nowhere to live**.
+
+**The manifest decays on exit** — on the frame the body leaves, with no debounce, ruled
+deliberately and carrying its ceiling as a `ponytail:` in arch §5.3.1. The predicate is
+`holds(peer, parcel) = scanned(peer, parcel) AND occupying(peer, scanDesk)`. The reason it is
+revoke rather than sticky is **Gate 2's measurement, not cruelty**: under a sticky grant a lone
+player can scan everything and then go route it, slowly, and the only thing making that
+non-viable is E5's quota clock — which is Tier 2 and does not exist when Gate 2 is played. Gate 2
+would have reported dilution, triggered E3-10, and the real fix would have been the clock it was
+missing.
+
+**Answering it also settled two things the gap did not ask about.** Working through arch §5.3's
+four rows, **only the manifest needs per-peer filtering**: `PolicyState` is replicated to
+everyone (E3-05 requires it), the chart's asymmetry is *optical*, and jam and stamp state are
+physically visible by requirement (E3-03). §5.3 gained a column saying so, headed **per-post
+filtering** rather than *network sync* — all four rows replicate, three of them to everybody, and
+the distinction matters because "jam state needs no replication" would be false. And **E15-01 is
+decided**: the scan result lives on a fixed diegetic screen at the desk, not on a carried
+clipboard, because decay-on-exit only reads as natural on a surface you walked away from.
 
 **Gaps 8 and 9 are open by construction, not by oversight.** Both were forced by building E13
 and both are recorded rather than decided privately, which is what the epics document asks for.

@@ -623,15 +623,68 @@ every client already holds every manifest.
 
 Instead: **the host does not send a manifest to a client that has not scanned it.**
 
-| Post | Client holds | Must ask for |
-| :-- | :-- | :-- |
-| Intake dock | Physical state, volume | Destination |
-| Scan desk | Manifest, declaration — *after scanning* | What the box physically is |
-| Routing chart | `PolicyState`, destination → chute | The destination code |
-| Chute floor | Chute state, jams | Which chute, and stamp state |
+**A post is an authored volume, and occupancy is a query rather than a stored fact** — ruled
+2026-08-25, see §5.3.1. That ruling is what the right-hand column below is read off.
+
+| Post | Client holds | Must ask for | Per-post filtering? |
+| :-- | :-- | :-- | :-- |
+| Intake dock | Physical state, volume | Destination | **No** — a body is visible to everyone |
+| Scan desk | Manifest, declaration — *after scanning* | What the box physically is | **Yes** — the only filtered fact in the game |
+| Routing chart | `PolicyState`, destination → chute | The destination code | **No** — replicated to all; the asymmetry is *optical* |
+| Chute floor | Chute state, jams | Which chute, and stamp state | **No** — replicated to all; physically visible |
+
+**Three of the four rows cost zero filtering code, and that is worth stating aggressively:**
+the only fact the host withholds from anyone is the manifest. `PolicyState` is replicated to
+every peer (E3-05 requires it) and the chart's asymmetry is enforced by *where the chart is* —
+it hangs on the far wall and is legible from that post, which is E15-02's check doing double
+duty. Jam state and stamp state replicate to everyone too; the stamp is required to be visible
+on the body to every peer (E3-03), because blame has to be legible in the moment.
+
+**"Per-post filtering" is not "replication": all four rows replicate.** Three of them
+replicate to everybody. Read this column as *"does the host decide per-peer whether to send
+it?"* — and only one row does. Anyone building a per-peer visibility path for jam state or
+stamp state is building something this table does not ask for.
 
 The information asymmetry is therefore a property of the network layer, which makes it
 real, cheaper (less data on the wire), and impossible to defeat with an overlay.
+
+#### 5.3.1 What a post is, physically
+
+Ruled 2026-08-25, resolving what the story breakdown filed as gap 4. **A post is an authored
+volume; the verbs inside it are stations.** Those are two different things, and the question as
+originally posed — *volume, or station?* — was a false binary that conflated three jobs:
+granting an information class, answering *which post is this player at*, and giving the player
+something to act on. Only the third is a station.
+
+- **A post is a volume** plus the information class it grants. Volumes do not overlap, and
+  there is unowned floor between them, so a body has exactly one containing post **by
+  construction**.
+- **The verbs are stations** — the scanner, the stamp, the chart — authored as nodes inside a
+  post's volume. Using one is a `Request*` intent, and the host admits it only if the actor's
+  body is inside that station's post volume. **One check, at the intent. Not per frame.**
+- **No post-occupancy state is stored anywhere.** Occupancy is a point-in-volume query, never a
+  field. "You cannot work two posts at once" therefore needs no lock, no lockout rule and no
+  error message — and, decisively, **no unlock path**. A station that binds a player until it
+  releases them is the same trap class E4-04's *a door cannot permanently trap a player* exists
+  to prevent, and it would fight §6.1's *input never waits for the network*.
+
+**The manifest decays on exit.** The predicate is
+`holds(peer, parcel) = scanned(peer, parcel) AND occupying(peer, scanDesk)`, driven by the
+volume's enter/exit rather than sampled per frame. A player who walks away from the desk stops
+holding what they read there, which is what makes vision §8's *no player can complete a parcel
+alone* literally true rather than merely expensive — and it is true **independently of E5's
+quota clock**, which matters because Gate 2 is played before E5 exists. A crew member who
+forgets a destination carries the box back to the mat, which costs belt flow and is funny.
+
+> `ponytail:` **Exit revokes on the frame the body leaves — no debounce.** Ruled deliberately.
+> Known ceiling: a player standing on a volume boundary jitters visibility and re-sends the
+> manifest on each re-entry, against §8's budget that E2-10 already measured at 63–70 KB/s
+> over a 60 KB/s line. Upgrade path is an exit-only debounce of about a second; nothing else
+> changes if it is ever needed.
+
+**Consequence for E15-01:** the scan result lives on a **fixed diegetic screen at the desk**,
+not on a carried clipboard. A clipboard that blanks as you carry it is nonsense; a monitor you
+walked away from needs no explanation.
 
 ### 5.4 Openable parcels
 
