@@ -57,7 +57,11 @@ public sealed class HostSession
     public ParcelRegistry Parcels { get; }
 
     /// <summary>Every peer currently connected, the host included.</summary>
-    public IReadOnlyCollection<PeerId> ConnectedPeers => _connectedPeers;
+    /// <remarks>
+    /// A copy. The set behind it is this session's crew, and a caller handed the real one can
+    /// add a peer that never joined.
+    /// </remarks>
+    public IReadOnlyCollection<PeerId> ConnectedPeers => [.. _connectedPeers];
 
     /// <summary>
     /// Records that <paramref name="peer"/> has joined.

@@ -209,6 +209,27 @@ public class PlayerCharacterTests
         }
     }
 
+    [TestCase]
+    public void A_mouse_motion_event_reaches_the_look()
+    {
+        var (root, body) = Rig();
+
+        try
+        {
+            var motion = new InputEventMouseMotion { Relative = new Vector2(100, 0) };
+
+            // Look is where the maths is asserted; this is the wire that carries a mouse to it.
+            // Without it the tests above pass a body no player can turn.
+            body._UnhandledInput(motion);
+
+            AssertFloat(body.Yaw).IsEqualApprox(-100 * body.LookSensitivity, 0.0001f);
+        }
+        finally
+        {
+            Drop(root);
+        }
+    }
+
     private static (Node3D Root, PlayerCharacter Body) Rig()
     {
         var tree = (SceneTree)Engine.GetMainLoop();

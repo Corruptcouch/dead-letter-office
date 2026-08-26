@@ -151,6 +151,16 @@ public partial class Peer : Node
     private Vector3 _lastParcelAt = Vector3.Zero;
     private double? _resolvedAt;
     private int _framesSinceResolved;
+
+    /// <summary>Who this peer saw holding the parcel when the contest resolved.</summary>
+    /// <remarks>
+    /// Captured rather than read at exit, for the same reason as the peer id: a peer that has
+    /// left has no holder map left to read, and the question is who held it while there was a
+    /// session to hold it in.
+    /// </remarks>
+    private string _resolvedHolders = PeerReport.None;
+
+    private int _resolvedHolderCount;
     private float _biggestJump;
     private double _grabbedAt = double.NaN;
     private double _answeredAt = double.NaN;
@@ -871,7 +881,7 @@ public partial class Peer : Node
         $"{PeerReport.Attempts}={_attempts}",
         $"{PeerReport.Won}={(_won ? 1 : 0)}",
         $"{PeerReport.Joints}={Joints(this)}",
-        $"{PeerReport.Holders}={Grabs.HoldersOf(ParcelPath).Count}",
+        $"{PeerReport.Holders}={_resolvedHolderCount}",
         $"{PeerReport.Holder}={Holder()}",
         $"{PeerReport.Parcel}={Where(_parcel)}",
         $"{PeerReport.Jump}={_biggestJump.ToString("F3", CultureInfo.InvariantCulture)}",
@@ -1004,9 +1014,11 @@ public partial class Peer : Node
         // nothing about the winner's grab, and the grab does currently snap the parcel into the
         // hand - see GrabDirector.Crew, where the lift is explicit. Measuring from before the grant
         // would fold that snap into this number and the assertion would be about the wrong thing.
-        if (_resolvedAt is null && Grabs.HoldersOf(ParcelPath).Count > 0)
+        if (_resolvedAt is null && Grabs.HoldersOf(ParcelPath) is { Count: > 0 } holders)
         {
             _resolvedAt = _elapsed;
+            _resolvedHolderCount = holders.Count;
+            _resolvedHolders = string.Join(',', holders);
         }
 
         // Counted in FRAMES, not seconds. A wall-clock grace made this flaky: under the load of
@@ -1021,11 +1033,7 @@ public partial class Peer : Node
         _lastParcelAt = at;
     }
 
-    private string Holder()
-    {
-        var holders = _parcel is null ? [] : Grabs.HoldersOf(ParcelPath);
-        return holders.Count == 0 ? PeerReport.None : string.Join(',', holders);
-    }
+    private string Holder() => _resolvedHolders;
 
     private static int Joints(Node node)
     {

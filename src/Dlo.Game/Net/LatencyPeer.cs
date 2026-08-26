@@ -18,9 +18,10 @@ namespace Dlo.Game.Net;
 /// </para>
 /// <para>
 /// <b>Reordering is allowed only where the network would really do it.</b> Jitter is per packet,
-/// but <c>Reliable</c> and <c>UnreliableOrdered</c> release order is preserved: ENet has already
-/// guaranteed it, so re-breaking it here would simulate a bug that cannot happen — and would tear
-/// scene replication apart doing it. Plain <c>Unreliable</c> packets may overtake each other.
+/// but <c>Reliable</c> and <c>UnreliableOrdered</c> release order is preserved within each
+/// (peer, channel, mode) stream, which is exactly what ENet guarantees: re-breaking it here would
+/// simulate a bug that cannot happen — and would tear scene replication apart doing it. Plain
+/// <c>Unreliable</c> packets may overtake each other.
 /// </para>
 /// </remarks>
 // ponytail: LatencyPeer delays and reorders packets in a decorator over MultiplayerPeer.
@@ -44,10 +45,24 @@ public partial class LatencyPeer : MultiplayerPeerExtension
     private readonly int _delayMs;
     private readonly int _jitterMs;
 
-    private ulong _lastOrderedRelease;
+    /// <summary>
+    /// The last release time handed out on each ordered stream, by peer, channel and mode.
+    /// </summary>
+    /// <remarks>
+    /// Per stream rather than one watermark, because ENet orders each of these independently: a
+    /// global one has a packet from one peer holding up a packet from another, which is a delay
+    /// the real network cannot produce.
+    /// </remarks>
+    private readonly Dictionary<(int Peer, int Channel, TransferModeEnum Mode), ulong>
+        _orderedRelease = [];
 
     private LatencyPeer(MultiplayerPeer inner, int delayMs, int jitterMs)
     {
+        // A negative figure reaches here from a project setting, and (ulong)(-1) ms is half a
+        // billion years: every packet held forever, presenting as a connection that never came up.
+        System.ArgumentOutOfRangeException.ThrowIfNegative(delayMs);
+        System.ArgumentOutOfRangeException.ThrowIfNegative(jitterMs);
+
         _inner = inner;
         _delayMs = delayMs;
         _jitterMs = jitterMs;
@@ -65,6 +80,9 @@ public partial class LatencyPeer : MultiplayerPeerExtension
     /// </summary>
     /// <exception cref="System.InvalidOperationException">
     /// The flag is set in a build that is not a debug build.
+    /// </exception>
+    /// <exception cref="System.ArgumentOutOfRangeException">
+    /// The configured delay or jitter is negative.
     /// </exception>
     /// <remarks>
     /// <b>The guard is an assertion, not a convention</b> (E0-07): a shipping build that silently
@@ -133,10 +151,11 @@ public partial class LatencyPeer : MultiplayerPeerExtension
 
             if (mode != TransferModeEnum.Unreliable)
             {
-                // Ordered traffic keeps its order: jitter may stretch the gap between two
-                // packets but may never let the second overtake the first.
-                release = System.Math.Max(release, _lastOrderedRelease);
-                _lastOrderedRelease = release;
+                // Ordered traffic keeps its order: jitter may stretch the gap between two packets
+                // on one stream, but may never let the second overtake the first.
+                var stream = (from, channel, mode);
+                release = System.Math.Max(release, _orderedRelease.GetValueOrDefault(stream));
+                _orderedRelease[stream] = release;
             }
 
             _taken[(int)mode]++;
@@ -246,6 +265,7 @@ public partial class LatencyPeer : MultiplayerPeerExtension
     public override void _Close()
     {
         _queue.Clear();
+        _orderedRelease.Clear();
         _inner.Close();
     }
 

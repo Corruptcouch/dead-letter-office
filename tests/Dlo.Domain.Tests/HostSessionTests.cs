@@ -119,4 +119,18 @@ public class HostSessionTests
         Assert.Throws<ArgumentOutOfRangeException>(() => director.Advance(-1f));
         Assert.Equal(5f, session.Director.ElapsedSeconds);
     }
+
+    [Fact]
+    public void The_shift_clock_refuses_a_delta_that_is_not_a_finite_number()
+    {
+        var session = NewSession(out var director, out _);
+        director.Advance(5f);
+
+        // The check above does not catch these: `NaN < 0` is false. One of them ends the shift
+        // rather than skewing it, because every later reading of the clock is NaN too.
+        Assert.Throws<ArgumentOutOfRangeException>(() => director.Advance(float.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => director.Advance(float.PositiveInfinity));
+
+        Assert.Equal(5f, session.Director.ElapsedSeconds);
+    }
 }

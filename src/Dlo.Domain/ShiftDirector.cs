@@ -24,15 +24,16 @@ public sealed class ShiftDirector
     /// Advances the shift clock by <paramref name="seconds"/>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="seconds"/> is negative. A negative delta is a caller bug that would
-    /// otherwise surface much later as a report disagreeing with what players remember.
+    /// <paramref name="seconds"/> is negative or not finite. Either is a caller bug that would
+    /// otherwise surface much later as a report disagreeing with what players remember, and a
+    /// non-finite one is unrecoverable: every later reading of the clock is NaN too.
     /// </exception>
     public void Advance(float seconds)
     {
-        if (seconds < 0f)
+        if (!float.IsFinite(seconds) || seconds < 0f)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(seconds), seconds, "The shift clock does not run backwards.");
+                nameof(seconds), seconds, "The shift clock runs forwards, by a finite amount.");
         }
 
         ElapsedSeconds += seconds;

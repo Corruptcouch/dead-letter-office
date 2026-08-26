@@ -1,5 +1,5 @@
 # E14-07. Every push: restore, build, format, L1, the architecture test, L2.
-# On merge to main, additionally: L3 (E0-09), as a second job.
+# On merge to the default branch, additionally: L3 (E0-09), as a second job.
 #
 # `ContentTool validate` runs below as of E13-05. That does not close E13-06: its criterion is
 # that a broken content file has been PUSHED and watched to fail the build, and nobody has done
@@ -96,20 +96,23 @@ jobs:
         # run and needs Godot to compile it, so the assembly is not final until then (E14-05).
         run: dotnet test tests/Dlo.Game.Tests
 
-  # L3 - four headless peers, on merge to main only (arch §10.6). It is a separate job rather
-  # than a step so that a broken L3 is unmistakable in the checks list, and so it cannot slow
-  # down the per-push loop by sitting in front of it.
+  # L3 - four headless peers, on merge to the default branch only (arch §10.6). It is a separate
+  # job rather than a step so that a broken L3 is unmistakable in the checks list, and so it
+  # cannot slow down the per-push loop by sitting in front of it.
   #
   # It is cheaper than arch §10.1 budgeted for: the four-peer run measured 0.63 s on Windows
-  # (E0-08), against a "minutes" budget. It is still gated to main, because the reason for the
-  # gate is that a network suite is the one most likely to go flaky on a shared runner, and a
-  # flaky per-push gate is one people learn to re-run rather than read.
+  # (E0-08), against a "minutes" budget. It is still gated, because the reason for the gate is
+  # that a network suite is the one most likely to go flaky on a shared runner, and a flaky
+  # per-push gate is one people learn to re-run rather than read.
+  #
+  # The ref below must name this repository's default branch. Naming one that does not exist
+  # does not skip the job - it never runs at all, and the checks list looks the same either way.
   #
   # The Godot install is duplicated from the job above rather than factored into a composite
   # action. Two copies of eight lines is cheaper than a third file to keep in step, and the
   # version already comes from one place - the env block at the top.
   l3:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
 
     steps:

@@ -144,6 +144,20 @@ public partial class PlayerCharacter : CharacterBody3D
             * (float)delta);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Mouse capture belongs to whatever put the player in the world, not to the body: a node
+    /// that grabbed the cursor would take it back off every menu the session opens.
+    /// </remarks>
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        // The same rule as the physics step: only the owner turns this body.
+        if (@event is InputEventMouseMotion mouse && IsMultiplayerAuthority())
+        {
+            Look(mouse.Relative);
+        }
+    }
+
     /// <summary>
     /// Turns the body and the head. Applied whole, on the frame it arrives.
     /// </summary>

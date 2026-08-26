@@ -25,9 +25,33 @@ if (root is null || !Directory.Exists(root))
 }
 
 var archetypeDirectory = Path.Combine(root, "archetypes");
-var archetypes = Directory.Exists(archetypeDirectory)
-    ? Directory.GetFiles(archetypeDirectory, "*.tres").OrderBy(f => f, StringComparer.Ordinal).Select(Read).ToList()
-    : [];
+
+// A missing table reads as an empty one below, and an empty table breaks no rule - so without
+// this an empty directory validates, and the gate reports a content set nobody authored as sound.
+var missing = new[] { "contents.csv", "manifests.csv", "routing.csv" }
+    .Select(name => Path.Combine(root, name))
+    .Where(path => !File.Exists(path))
+    .ToList();
+
+if (!Directory.Exists(archetypeDirectory)
+    || !Directory.EnumerateFiles(archetypeDirectory, "*.tres").Any())
+{
+    missing.Add(archetypeDirectory);
+}
+
+if (missing.Count > 0)
+{
+    // 2 rather than 1: nothing was judged. "Invalid content" and "there is no content" send an
+    // author to different places, and only the second is ever a broken checkout.
+    Console.Error.WriteLine(
+        $"Content set is incomplete at '{root}'. Missing: {string.Join(", ", missing)}.");
+    return 2;
+}
+
+var archetypes = Directory.GetFiles(archetypeDirectory, "*.tres")
+    .OrderBy(f => f, StringComparer.Ordinal)
+    .Select(Read)
+    .ToList();
 
 var loaded = ContentSet.TryLoad(
     archetypes,

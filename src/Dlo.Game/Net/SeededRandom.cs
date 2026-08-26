@@ -53,10 +53,12 @@ public sealed class SeededRandom(int seed) : IRandom
         for (var i = 0; i < items.Count; i++)
         {
             var w = weight(items[i]);
-            if (w < 0f)
+            if (!float.IsFinite(w) || w < 0f)
             {
+                // Non-finite as well as negative: NaN fails every comparison below and infinity
+                // swallows the roll, so both present as a draw that is fixed rather than random.
                 throw new ArgumentException(
-                    $"Negative weight {w} at index {i}; weights are proportions, not offsets.",
+                    $"Weight {w} at index {i} is not a finite proportion.",
                     nameof(weight));
             }
 

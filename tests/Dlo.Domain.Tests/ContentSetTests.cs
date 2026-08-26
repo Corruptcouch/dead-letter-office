@@ -184,6 +184,41 @@ public class ContentSetTests
         Assert.Equal(new ChuteId(1), set.Routing.ChuteFor(new DestinationCode("NORTHGATE-4")));
     }
 
+    [Fact]
+    public void A_declared_weight_that_is_not_a_finite_number_is_rejected()
+    {
+        // "NaN" parses, and `NaN <= 0` is false, so the range check alone lets it through - and
+        // it reaches the ledger, where every total it touches becomes NaN and nothing says why.
+        Assert.False(Load(
+            out var set,
+            out var problems,
+            [Archetype(1, "Envelope", 0.4f, 1, "STATIONERY")],
+            manifests: "NORTHGATE-4-118,NaN,10,STATIONERY\n"));
+
+        Assert.Null(set);
+        Assert.Contains(
+            problems,
+            p => p.Invariant.StartsWith("a declared weight", System.StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_contents_row_carrying_more_than_a_code_is_rejected()
+    {
+        // Reading field zero alone accepts the second column and silently ignores it, so an
+        // author who thought they were declaring something would never be told otherwise.
+        Assert.False(ContentSet.TryLoad(
+            [Archetype(1, "Envelope", 0.4f, 1, "STATIONERY")],
+            new ContentFile("content/contents.csv", "STATIONERY,3\nGLASSWARE\n"),
+            new ContentFile("content/manifests.csv", Manifests),
+            new ContentFile("content/routing.csv", Routing),
+            out _,
+            out var problems));
+
+        Assert.Contains(
+            problems,
+            p => p.Invariant.StartsWith("a contents row", System.StringComparison.Ordinal));
+    }
+
     private static ContentFile Archetype(int id, string name, float mass, int size, string contents) =>
         new(
             $"content/archetypes/{name.ToLowerInvariant().Replace(' ', '_')}.tres",

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 using Xunit;
 
@@ -17,7 +18,7 @@ namespace Dlo.Domain.Tests;
 /// runs is a comment, and the authored files are the thing most likely to be edited by someone
 /// who is not running the tool.
 /// </remarks>
-public class AuthoredContentTests
+public partial class AuthoredContentTests
 {
     [Fact]
     public void The_content_this_repo_ships_is_valid()
@@ -76,6 +77,56 @@ public class AuthoredContentTests
         // would leave both testing nothing.
         Assert.Contains(set!.Archetypes, a => ParcelRecord.CarriersRequiredFor(a.Size) > 1);
     }
+
+    [Fact]
+    public void Every_authored_resource_names_its_script_in_the_case_the_disk_uses()
+    {
+        // res:// is the Godot project directory, which is the parent of the content directory.
+        var project = Directory.GetParent(Root())!.FullName;
+
+        foreach (var file in Archetypes())
+        {
+            foreach (var reference in ExternalResource().Matches(file.Text).Cast<Match>())
+            {
+                var referenced = reference.Groups[1].Value;
+
+                // Windows resolves `res://Content/...` against a `content/` directory without
+                // complaint; a Linux export does not, and the resource loads with no script
+                // attached. So the case is asserted, which File.Exists here cannot do.
+                Assert.True(
+                    NamedExactly(project, referenced),
+                    $"{file.Path} references 'res://{referenced}', which nothing matches exactly.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="referenced"/> exists under <paramref name="project"/> spelled
+    /// exactly as it is written, walking a segment at a time because the host filesystem will
+    /// happily answer a case-insensitive question with yes.
+    /// </summary>
+    private static bool NamedExactly(string project, string referenced)
+    {
+        var at = project;
+
+        foreach (var segment in referenced.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var next = Directory.EnumerateFileSystemEntries(at).FirstOrDefault(
+                entry => string.Equals(Path.GetFileName(entry), segment, StringComparison.Ordinal));
+
+            if (next is null)
+            {
+                return false;
+            }
+
+            at = next;
+        }
+
+        return true;
+    }
+
+    [GeneratedRegex("path=\"res://([^\"]+)\"", RegexOptions.CultureInvariant)]
+    private static partial Regex ExternalResource();
 
     private static IReadOnlyList<ContentFile> Archetypes() =>
         Directory.GetFiles(Path.Combine(Root(), "archetypes"), "*.tres")

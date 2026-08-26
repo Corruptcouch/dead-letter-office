@@ -101,6 +101,15 @@ public sealed partial class ContentSet
 
         foreach (var row in ContentText.Rows(file.Text))
         {
+            // Width first. Reading field zero alone accepts `STATIONERY,3` and silently ignores
+            // whatever the author thought the second column meant.
+            if (row.Fields.Count != 1)
+            {
+                found.Add(new ContentProblem(
+                    file.Path, row.Line, "a contents row is one code", $"{row.Fields.Count} fields"));
+                continue;
+            }
+
             var code = row.Fields[0];
 
             if (!Code().IsMatch(code))
@@ -279,10 +288,17 @@ public sealed partial class ContentSet
                 continue;
             }
 
-            if (!float.TryParse(row.Fields[1], CultureInfo.InvariantCulture, out var weight) || weight <= 0)
+            // Finite as well as positive: "NaN" parses, and `NaN <= 0` is false, so the range
+            // check alone lets it through and every sum it later reaches is NaN.
+            if (!float.TryParse(row.Fields[1], CultureInfo.InvariantCulture, out var weight)
+                || !float.IsFinite(weight)
+                || weight <= 0)
             {
                 found.Add(new ContentProblem(
-                    file.Path, row.Line, "a declared weight is above zero", Show(row.Fields[1])));
+                    file.Path,
+                    row.Line,
+                    "a declared weight is a finite number above zero",
+                    Show(row.Fields[1])));
                 continue;
             }
 

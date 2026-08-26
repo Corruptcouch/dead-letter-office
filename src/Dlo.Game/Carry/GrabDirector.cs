@@ -17,7 +17,7 @@ namespace Dlo.Game.Carry;
 /// named child of an autoload gives it.
 /// <para>
 /// <b>The real joint exists only on the host</b> (arch §3.3). Clients keep a visual attachment and
-/// a holder map, both derived; <see cref="Holders"/> is the decision the host broadcast, never a
+/// a holder map, both derived; <see cref="HoldersOf"/> is the decision the host broadcast, never a
 /// per-frame stream.
 /// </para>
 /// </remarks>
@@ -34,6 +34,14 @@ public partial class GrabDirector : Node
     /// <summary>The node name this is registered under, on every peer.</summary>
     public const string NodeName = "GrabDirector";
 
+    /// <summary>The most a single throw may impart, in newton-seconds.</summary>
+    /// <remarks>
+    /// The magnitude arrives from the peer and Jolt has no upper bound of its own, so an
+    /// uncapped shove is one unreliable number away from putting a parcel through the facility.
+    /// Twice E1-07's reference throw, so a real one is never clipped.
+    /// </remarks>
+    public const float MaxThrowImpulse = 400.0f;
+
     private readonly Dictionary<long, Node3D> _carriers = [];
     private readonly Dictionary<string, List<Hold>> _holds = new(System.StringComparer.Ordinal);
     private readonly Dictionary<string, List<long>> _holders = new(System.StringComparer.Ordinal);
@@ -43,9 +51,6 @@ public partial class GrabDirector : Node
 
     /// <summary>Raised on the peer whose grab was refused, with the reason.</summary>
     public event System.Action<string, GrabVerdict>? Denied;
-
-    /// <summary>Who holds what, on every peer. The host is the only writer.</summary>
-    public IReadOnlyDictionary<string, List<long>> Holders => _holders;
 
     /// <summary>
     /// The host's parcel registry, or <c>null</c> on a client and outside a session.
@@ -89,9 +94,45 @@ public partial class GrabDirector : Node
         }
     }
 
+    /// <summary>Drops every grip, holder and carrier this session had.</summary>
+    /// <remarks>
+    /// This node outlives the session that filled it — it is a child of an autoload — so without
+    /// this a rehost begins holding the last session's parcels, on native joints nothing freed.
+    /// Freed rather than queued, because the frame that would collect them may never come.
+    /// </remarks>
+    public void ResetSession()
+    {
+        foreach (var hold in _holds.Values.SelectMany(static holds => holds))
+        {
+            if (hold.Joint is { } joint && GodotObject.IsInstanceValid(joint))
+            {
+                joint.Free();
+            }
+
+            hold.Joint = null;
+        }
+
+        _holds.Clear();
+        _holders.Clear();
+        _carriers.Clear();
+        Parcels = null;
+        HoldsChanged?.Invoke();
+    }
+
+    /// <summary>How many loads the host is currently tracking a hold on.</summary>
+    /// <remarks>
+    /// Public because bookkeeping left behind by a refused grab is invisible from outside and
+    /// unbounded from inside, so the suite has nothing else to assert against (standards §6).
+    /// </remarks>
+    public int Tracked => _holds.Count;
+
     /// <summary>Who is holding the load at <paramref name="loadPath"/>, on any peer.</summary>
+    /// <remarks>
+    /// A copy. The list behind it is the host's decision, and a caller handed the real one can
+    /// add a holder that was never granted.
+    /// </remarks>
     public IReadOnlyList<long> HoldersOf(string loadPath) =>
-        _holders.TryGetValue(loadPath, out var list) ? list : [];
+        _holders.TryGetValue(loadPath, out var list) ? list.ToArray() : [];
 
     /// <summary>The load <paramref name="peer"/> is holding, or <c>null</c>.</summary>
     public string? HeldBy(long peer) =>
@@ -184,6 +225,7 @@ public partial class GrabDirector : Node
             list.Add(holder);
         }
 
+        Carry(holder, GetNodeOrNull<Carryable>(loadPath));
         HoldsChanged?.Invoke();
     }
 
@@ -197,6 +239,7 @@ public partial class GrabDirector : Node
             _holders.Remove(loadPath);
         }
 
+        Carry(holder, null);
         HoldsChanged?.Invoke();
     }
 
@@ -232,13 +275,11 @@ public partial class GrabDirector : Node
             return;
         }
 
-        if (!_holds.TryGetValue(loadPath, out var held))
-        {
-            held = [];
-            _holds[loadPath] = held;
-        }
+        // Looked up rather than created. An entry made before the verdict is one a refused grab
+        // leaves behind for good, and a belt that never stops supplies refusals without bound.
+        var held = _holds.GetValueOrDefault(loadPath);
 
-        var slot = held.Count;
+        var slot = held?.Count ?? 0;
         var distance = _carriers.TryGetValue(peer, out var carrier)
             ? carrier.GlobalPosition.DistanceTo(load.GlobalGrip(slot))
             : float.MaxValue;
@@ -251,10 +292,10 @@ public partial class GrabDirector : Node
 
         var verdict = GrabRules.Evaluate(
             distance,
-            held.Count,
+            slot,
             parcel?.CarriersRequired ?? load.CarriersRequired,
             parcel?.IsLocked ?? false,
-            alreadyHolding: held.Exists(h => h.Peer == peer));
+            alreadyHolding: held?.Exists(h => h.Peer == peer) ?? false);
 
         if (verdict != GrabVerdict.Granted)
         {
@@ -262,12 +303,27 @@ public partial class GrabDirector : Node
             return;
         }
 
+        held ??= [];
+        _holds[loadPath] = held;
+
         // The one place a physics joint is created in the whole build (arch §3.3).
         var hand = Anchor(carrier!);
         held.Add(new Hold(peer, slot, hand));
         Crew(load, held);
 
         Rpc(MethodName.GrabResolved, loadPath, peer);
+    }
+
+    /// <summary>
+    /// Points a carrier at what it is now holding, so a load's weight reaches whoever is
+    /// carrying it (E1-07). Runs on every peer; only the body's owner acts on it.
+    /// </summary>
+    private void Carry(long peer, Carryable? load)
+    {
+        if (_carriers.TryGetValue(peer, out var carrier) && carrier is PlayerCharacter player)
+        {
+            player.Carried = load;
+        }
     }
 
     private void Refuse(long peer, string loadPath, GrabVerdict verdict)
@@ -325,7 +381,15 @@ public partial class GrabDirector : Node
 
     private void Hurl(string loadPath, long peer, Vector3 aim)
     {
-        if (!Multiplayer.IsServer())
+        // A throw is a release and a shove, and the shove is earned by the release. This is
+        // reachable from an AnyPeer RPC, so without the hold check any peer can launch any
+        // addressable body - and whether it holds one is the host's fact, not the sender's
+        // (arch §3.1). A non-finite aim is refused rather than clamped: it is not a shove that
+        // was too big, it is a number that removes the body from the simulation on every peer.
+        if (!Multiplayer.IsServer()
+            || !_holds.TryGetValue(loadPath, out var held)
+            || !held.Exists(h => h.Peer == peer)
+            || !aim.IsFinite())
         {
             return;
         }
@@ -335,7 +399,7 @@ public partial class GrabDirector : Node
 
         // Impulse, not velocity: the same shove moves a heavy parcel less, so a bad projectile is
         // a consequence of its mass rather than a special case (E1-07).
-        load?.ApplyCentralImpulse(aim);
+        load?.ApplyCentralImpulse(aim.LimitLength(MaxThrowImpulse));
     }
 
     private static AnimatableBody3D Anchor(Node3D carrier) =>

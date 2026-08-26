@@ -287,7 +287,166 @@ public class GrabDirectorTests
         }
     }
 
-    private static async Task<float> ThrownSpeed(float mass)
+    [TestCase]
+    public async Task A_granted_grab_tells_the_carrier_what_it_is_holding()
+    {
+        var rig = Rig();
+
+        try
+        {
+            rig.Director.Grab(rig.Load);
+            await rig.Frame();
+
+            // Without this the weight never reaches the carrier: ApplyCarryPull returns on its
+            // first line for a body that does not know it is holding anything (E1-07).
+            AssertObject(rig.Carrier.Carried).IsSame(rig.Load);
+
+            rig.Director.Release(rig.Load);
+            await rig.Frame();
+
+            AssertObject(rig.Carrier.Carried).IsNull();
+        }
+        finally
+        {
+            rig.Drop();
+        }
+    }
+
+    [TestCase]
+    public async Task A_peer_that_is_not_holding_a_load_cannot_throw_it()
+    {
+        var rig = Rig();
+
+        try
+        {
+            await rig.Settle(2);
+            var before = rig.Load.GlobalPosition;
+
+            // No grab first. RequestThrow is an AnyPeer RPC, so this is the shape of a packet
+            // any peer can send about any parcel it can name, and the release inside Hurl is a
+            // no-op for a peer holding nothing - which used to leave the shove behind.
+            rig.Director.Throw(rig.Load, new Vector3(0, 0, -200));
+            await rig.Frame();
+
+            // It may fall. It may not travel.
+            AssertFloat(rig.Load.GlobalPosition.Z).IsEqualApprox(before.Z, 0.01f);
+            AssertFloat(rig.Load.LinearVelocity.Z).IsEqualApprox(0.0f, 0.01f);
+        }
+        finally
+        {
+            rig.Drop();
+        }
+    }
+
+    [TestCase]
+    public async Task A_shove_past_the_cap_lands_at_the_cap()
+    {
+        var capped = await ThrownSpeed(Mass, GrabDirector.MaxThrowImpulse);
+        var absurd = await ThrownSpeed(Mass, GrabDirector.MaxThrowImpulse * 1000.0f);
+
+        // The same speed, not merely a bounded one: the magnitude arrives from a peer, and a cap
+        // that only mostly held would still put a parcel through the far wall of the facility.
+        // The tolerance is a frame of gravity and a released spring, not slack in the cap - a
+        // thousand times the impulse is a thousand times the speed if this ever comes out.
+        AssertFloat(absurd).IsEqualApprox(capped, 0.5f);
+        AssertFloat(capped).IsGreater(0.0f);
+    }
+
+    [TestCase]
+    public async Task A_throw_that_is_not_a_number_is_refused_rather_than_clamped()
+    {
+        var rig = Rig();
+
+        try
+        {
+            rig.Director.Grab(rig.Load);
+            await rig.Frame();
+
+            rig.Director.Throw(rig.Load, new Vector3(0, 0, float.NaN));
+            await rig.Settle(5);
+
+            // Not a shove that was too big. A NaN impulse takes the body out of the simulation
+            // on every peer, and nothing anywhere reports it - so the whole call is refused,
+            // release included, rather than half-applied.
+            AssertBool(rig.Load.GlobalPosition.IsFinite()).IsTrue();
+            AssertBool(rig.Load.LinearVelocity.IsFinite()).IsTrue();
+            AssertInt(rig.Director.HoldersOf(rig.Path).Count).IsEqual(1);
+        }
+        finally
+        {
+            rig.Drop();
+        }
+    }
+
+    [TestCase]
+    public async Task A_refused_grab_leaves_no_bookkeeping_behind()
+    {
+        var rig = Rig();
+
+        try
+        {
+            // A granted grab first, so the zero below is a real absence rather than a property
+            // that reads zero whatever happens (standards §8: a test that cannot fail).
+            rig.Director.Grab(rig.Load);
+            await rig.Frame();
+            AssertInt(rig.Director.Tracked).IsEqual(1);
+
+            rig.Director.Release(rig.Load);
+            await rig.Frame();
+            AssertInt(rig.Director.Tracked).IsEqual(0);
+
+            rig.Load.GlobalPosition = new Vector3(0, 1.0f, -20.0f);
+
+            for (var i = 0; i < 5; i++)
+            {
+                rig.Director.Grab(rig.Load);
+                await rig.Frame();
+            }
+
+            // A missed grab is the common case at a belt that never stops, and an entry made
+            // before the verdict is one nothing ever removes.
+            AssertInt(rig.Director.Tracked).IsEqual(0);
+        }
+        finally
+        {
+            rig.Drop();
+        }
+    }
+
+    [TestCase]
+    public async Task Ending_a_session_frees_every_grip_and_forgets_every_carrier()
+    {
+        var rig = Rig();
+
+        try
+        {
+            rig.Director.Grab(rig.Load);
+            await rig.Frame();
+            AssertInt(Joints(rig.Director)).IsEqual(1);
+
+            rig.Director.ResetSession();
+            await rig.Frame();
+
+            // This node is a child of an autoload and outlives the session that filled it, so
+            // without this a rehost starts holding the last session's parcel on a live joint.
+            AssertInt(Joints(rig.Director)).IsEqual(0);
+            AssertInt(rig.Director.Tracked).IsEqual(0);
+            AssertInt(rig.Director.HoldersOf(rig.Path).Count).IsEqual(0);
+            AssertObject(rig.Director.Parcels).IsNull();
+
+            // The carriers go too: a grab afterwards finds nobody to attach to, rather than
+            // attaching to a body the session before it registered.
+            rig.Director.GrabFor(Host, rig.Path);
+            await rig.Frame();
+            AssertInt(Joints(rig.Director)).IsEqual(0);
+        }
+        finally
+        {
+            rig.Drop();
+        }
+    }
+
+    private static async Task<float> ThrownSpeed(float mass, float impulse = 200.0f)
     {
         var rig = Rig(mass: mass);
 
@@ -296,7 +455,7 @@ public class GrabDirectorTests
             rig.Director.Grab(rig.Load);
             await rig.Frame();
 
-            rig.Director.Throw(rig.Load, new Vector3(0, 0, -200));
+            rig.Director.Throw(rig.Load, new Vector3(0, 0, -impulse));
             await rig.Frame();
 
             return rig.Load.LinearVelocity.Length();

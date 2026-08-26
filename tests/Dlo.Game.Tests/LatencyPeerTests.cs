@@ -57,6 +57,21 @@ public class LatencyPeerTests
     }
 
     [TestCase]
+    public void A_negative_figure_is_refused_rather_than_wrapping_around()
+    {
+        var peer = new ENetMultiplayerPeer();
+
+        // The figures come from project settings, and the arithmetic that uses them is unsigned:
+        // -1 ms becomes half a billion years of delay, and the harness looks like a dead line
+        // rather than like a misconfiguration.
+        AssertThrown(() => LatencyPeer.Wrap(peer, delayMs: -1, jitterMs: 0))
+            .IsInstanceOf<System.ArgumentOutOfRangeException>();
+
+        AssertThrown(() => LatencyPeer.Wrap(peer, delayMs: 0, jitterMs: -1))
+            .IsInstanceOf<System.ArgumentOutOfRangeException>();
+    }
+
+    [TestCase]
     public async Task A_wrapped_peer_holds_a_packet_back_and_then_delivers_it()
     {
         var host = new ENetMultiplayerPeer();

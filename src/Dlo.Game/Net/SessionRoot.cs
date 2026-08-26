@@ -60,6 +60,7 @@ public partial class SessionRoot : Node
     /// <param name="maxPeers">Clients allowed in addition to the host.</param>
     public void Host(int maxPeers)
     {
+        EnsureIdle();
         StartWith(Transport.CreateHost(maxPeers));
     }
 
@@ -67,6 +68,7 @@ public partial class SessionRoot : Node
     /// <param name="address">Transport-defined; see <see cref="IGameTransport.CreateClient"/>.</param>
     public void Join(string address)
     {
+        EnsureIdle();
         StartWith(Transport.CreateClient(address));
     }
 
@@ -91,9 +93,10 @@ public partial class SessionRoot : Node
         // "no session" is that type and not the absence of one - see IsInSession.
         Multiplayer.MultiplayerPeer = null;
 
-        // The registry goes with the session it belonged to; a stale one would answer the next
-        // shift's grabs with the last shift's parcels.
-        _grabs?.Parcels = null;
+        // The grab state goes with the session it belonged to. A stale registry would answer the
+        // next shift's grabs with the last shift's parcels, and a stale hold would start that
+        // shift already carrying one, on a joint from a tree that is gone.
+        _grabs?.ResetSession();
 
         _hostSession = null;
     }
@@ -105,18 +108,44 @@ public partial class SessionRoot : Node
         return grabs;
     }
 
+    /// <summary>Refuses to start a second session on top of a live one.</summary>
+    /// <remarks>
+    /// Checked before the transport is asked for a peer, because a socket bound by a call that
+    /// then replaced the live peer is one nothing can close afterwards.
+    /// </remarks>
+    private void EnsureIdle()
+    {
+        if (IsInSession)
+        {
+            throw new System.InvalidOperationException(
+                "A session is already running on this peer. Leave() it before hosting or joining.");
+        }
+    }
+
     private void StartWith(MultiplayerPeer peer)
     {
-        // The one place the lag harness is attached (E0-07). Returns the peer untouched unless a
-        // development build asked for it, and throws if the flag survived into a release export.
-        Multiplayer.MultiplayerPeer = LatencyPeer.WrapIfConfigured(peer);
-        Multiplayer.PeerConnected += OnPeerConnected;
-        Multiplayer.PeerDisconnected += OnPeerDisconnected;
+        try
+        {
+            // The one place the lag harness is attached (E0-07). Returns the peer untouched
+            // unless a development build asked for it, and throws if the flag survived into a
+            // release export.
+            Multiplayer.MultiplayerPeer = LatencyPeer.WrapIfConfigured(peer);
+            Multiplayer.PeerConnected += OnPeerConnected;
+            Multiplayer.PeerDisconnected += OnPeerDisconnected;
 
-        // Before BeginSession, because an RPC that arrives for a node the tree does not have yet
-        // is dropped with a warning nobody reads.
-        _ = Grabs;
-        BeginSession();
+            // Before BeginSession, because an RPC that arrives for a node the tree does not have
+            // yet is dropped with a warning nobody reads.
+            _ = Grabs;
+            BeginSession();
+        }
+        catch
+        {
+            // Half a session is worse than none: the socket stays bound, and every later Host()
+            // is refused by a session that never started. Teardown is idempotent (see Leave).
+            peer.Close();
+            Leave();
+            throw;
+        }
     }
 
     private void BeginSession()
